@@ -96,7 +96,7 @@
 %%
 
 Program
-    : {create_symbol();} GlobalStatementList //{dump_symbol();} 
+    : {create_symbol();} GlobalStatementList {dump_symbol();} 
 ;
 GlobalStatementList 
     : GlobalStatementList GlobalStatement
@@ -111,9 +111,9 @@ GlobalStatement
 
 FunctionDeclStmt
     : FUNC ID {printf("func: %s\n", $2);} '(' ')' {insert_symbol($2, -1, "func",  line_number, "(V)V");} 
-    {create_symbol();} Block {dump_symbol();};
+     Block ;
 Block
-    : '{' StatementList '}' ;
+    : {create_symbol();} '{' StatementList '}' {dump_symbol();};
 StatementList
     : StatementList Statement 
     | /* empty */  ;
@@ -121,6 +121,7 @@ Statement
     : AssignStmt
     | PrintStatement
     | NEWLINE {++line_number;}
+    | Block
 ;
 
 
@@ -268,6 +269,7 @@ static char* lookup_symbol_type(char* ID_name) {
         for(int j =0; j<symbol_count[i]; j++){
             if(0 ==  strcmp(ID_name,symbol_table[i][j].name)){
                 SameType = symbol_table[i][j].type;
+                return SameType;
             }
         }
     }
@@ -280,6 +282,7 @@ static int lookup_symbol_addr(char* ID_name) {
         for(int j =0; j<symbol_count[i]; j++){
             if(0 ==  strcmp(ID_name,symbol_table[i][j].name)){
                 addregera = symbol_table[i][j].addr;
+                return addregera;
             }
         }
     }
@@ -293,17 +296,31 @@ static void dump_symbol() {
     printf("%-10d%-10s%-10d%-10s%-10d%-10d%-10s\n",
             0, "name", 0, "type", 0, 0, "func_sig"); */
 
-    for (int level = scope_level; level >= 0; level--) {
+
+    int level = scope_level;
+    printf("\n> Dump symbol table (scope level: %d)\n", level);
+    printf("%-10s%-10s%-10s%-10s%-10s%-10s%-10s\n",
+        "Index", "Name", "Mut", "Type", "Addr", "Lineno", "Func_sig");
+    for (int i = 0; i < symbol_count[level]; i++) {
+        Symbol s = symbol_table[level][i];
+        printf("%-10d%-10s%-10d%-10s%-10d%-10d%-10s\n",
+            s.index, s.name, s.mut, s.type, s.addr, s.lineno, s.func_sig);
+    }
+    symbol_count[level] = 0;
+    scope_level--;
+
+
+
+    /* for (int level = scope_level; level >= 0; level--) {
         printf("\n> Dump symbol table (scope level: %d)\n", level);
         printf("%-10s%-10s%-10s%-10s%-10s%-10s%-10s\n",
             "Index", "Name", "Mut", "Type", "Addr", "Lineno", "Func_sig");
-
         for (int i = 0; i < symbol_count[level]; i++) {
             Symbol s = symbol_table[level][i];
             printf("%-10d%-10s%-10d%-10s%-10d%-10d%-10s\n",
                 s.index, s.name, s.mut, s.type, s.addr, s.lineno, s.func_sig);
         }
-    }
+    } */
 
     /* 
     // free(): double free detected in tcache 2
