@@ -125,15 +125,15 @@ Statement
 
 
 AssignStmt
-    : LET ID ':' Type '=' LIT ';' {insert_symbol($2, 0, $6, line_number, "-");printf("IDENT (name=%s, address=%d)\n", $2, addr); }
-    | LET MUT ID ':' Type '=' LIT ';' {insert_symbol($3, 1, $7, line_number, "-");printf("IDENT (name=%s, address=%d)\n", $3, addr); }
-    | LET MUT ID '=' LIT ';' {insert_symbol($3, 1, $5, line_number, "-");printf("IDENT (name=%s, address=%d)\n", $3, addr); }
-    | ID '=' LIT ';' {printf("ASSIGN\n"); printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); }
-    | ID ADD_ASSIGN LIT ';' {printf("ADD_ASSIGN\n");printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); }
-    | ID SUB_ASSIGN LIT ';' {printf("SUB_ASSIGN\n");printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); }
-    | ID MUL_ASSIGN LIT ';' {printf("MUL_ASSIGN\n");printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); }
-    | ID DIV_ASSIGN LIT ';' {printf("DIV_ASSIGN\n");printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); }
-    | ID REM_ASSIGN LIT ';' {printf("REM_ASSIGN\n");printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); }
+    : LET ID ':' Type '=' LIT ';' {insert_symbol($2, 0, $6, line_number, "-");}
+    | LET MUT ID ':' Type '=' LIT ';' {insert_symbol($3, 1, $7, line_number, "-");}
+    | LET MUT ID '=' LIT ';' {insert_symbol($3, 1, $5, line_number, "-");}
+    | ID '=' LIT ';' {printf("ASSIGN\n");}
+    | ID ADD_ASSIGN LIT ';' {printf("ADD_ASSIGN\n");}
+    | ID SUB_ASSIGN LIT ';' {printf("SUB_ASSIGN\n");}
+    | ID MUL_ASSIGN LIT ';' {printf("MUL_ASSIGN\n");}
+    | ID DIV_ASSIGN LIT ';' {printf("DIV_ASSIGN\n");}
+    | ID REM_ASSIGN LIT ';' {printf("REM_ASSIGN\n");}
 ;
 
 PrintStatement
@@ -141,7 +141,7 @@ PrintStatement
     | PRINT '(' PrintContent ')' ';' {printf("PRINT %s\n", $3); };
 PrintContent
     : LIT {$$ = $1;} 
-    | ID {$$ = lookup_symbol_type($1);}
+    | ID {$$ = lookup_symbol_type($1); printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); }
     | Expression {$$ = $1;}
     | NEWLINE Expression{$$ = $2; ++line_number;}
     | NEWLINE Expression NEWLINE{$$ = $2; ++line_number; ++line_number;}
@@ -176,7 +176,7 @@ UnaryExpr
 NeverGonnaGiveYouUp
     : '(' Expression ')' {$$ = $2;} ;
     | LIT {$$ = $1;}
-    | ID {$$ = lookup_symbol_type($1);}
+    | ID {$$ = lookup_symbol_type($1); printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); }
 ;
 
 /* Arithmetic
