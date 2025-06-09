@@ -27,6 +27,8 @@
     static char* lookup_symbol_type();
     static int lookup_symbol_addr();
     static void dump_symbol();
+    // static void write();
+    // static int read();
 
     /* Global variables */
     bool HAS_ERROR = false;
@@ -46,6 +48,8 @@
     static int scope_level = -1;
     static int addr = -2;
     static int line_number = 1;
+    // static int array[128] = {0};
+    // static int length;
 %};
 
 %error-verbose
@@ -152,6 +156,14 @@ AssignStmt
     | ID DIV_ASSIGN LIT ';' {printf("DIV_ASSIGN\n");}
     | ID REM_ASSIGN LIT ';' {printf("REM_ASSIGN\n");}
     | ID '=' Expression ';'
+    | LET ID ':' ARRAY {insert_symbol($2, 0, "array", line_number, "-");}              // a08
+;
+
+ARRAY
+    : '[' Type ';' LIT ']' '=' '[' VALUE ']' ';' ;                                       // a08
+VALUE
+    : LIT ',' VALUE // {write(length++, $1);}
+    | LIT // {write(length++, $1);}
 ;
 
 PrintStatement
@@ -165,6 +177,7 @@ PrintContent
     | NEWLINE Expression NEWLINE{$$ = $2; ++line_number; ++line_number;}
     | Expression NEWLINE{$$ = $1; ++line_number;}
     | NEWLINE {++line_number;}
+    | ID '[' INT_LIT ']' {$$ = "array"; printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));  printf("INT_LIT %d\n", $3);}
 ;
 
 Expression
@@ -294,7 +307,7 @@ static char* lookup_symbol_type(char* ID_name) {
 }
 
 static int lookup_symbol_addr(char* ID_name) {
-    int addregera = -1;
+    int addregera = -2147483648;
     for(int i=scope_level; i>=0;i--){
         for(int j =0; j<symbol_count[i]; j++){
             if(0 ==  strcmp(ID_name,symbol_table[i][j].name)){
@@ -305,6 +318,13 @@ static int lookup_symbol_addr(char* ID_name) {
     }
     return addregera;
 }
+
+/* static void write(int i, int val){
+    array[i] = val;
+}
+static int read(int i){
+    return array[i];
+} */
 
 static void dump_symbol() {
     /* printf("\n> Dump symbol table (scope level: %d)\n", 0);
