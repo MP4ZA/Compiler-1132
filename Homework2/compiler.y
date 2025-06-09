@@ -87,7 +87,7 @@
 %type <s_val> Type
 %type <s_val> LIT
 %type <s_val> PrintContent
-/* %type <s_val> Expression LogicalOrExpr LogicalAndExpr EqualityExpr AddExpr MulExpr UnaryExpr Porsche */
+%type <s_val> Expression LogicalOrExpr LogicalAndExpr EqualityExpr AddExpr MulExpr UnaryExpr NeverGonnaGiveYouUp
 
 /* Yacc will start at this nonterminal */
 %start Program
@@ -138,48 +138,46 @@ AssignStmt
 
 PrintStatement
     : PRINTLN '(' PrintContent ')' ';' {printf("PRINTLN %s\n", $3); }
-    | PRINT '(' PrintContent ')' ';' {printf("PRINTLN %s\n", $3); };
+    | PRINT '(' PrintContent ')' ';' {printf("PRINT %s\n", $3); };
 PrintContent
     : LIT {$$ = $1;} 
     | ID {$$ = lookup_symbol_type($1);}
-    /* | Expression {printf("PRINTLN %s\n", "typeR");} */
+    | Expression {$$ = $1;}
+    | NEWLINE Expression{$$ = $2; ++line_number;}
+    | NEWLINE Expression NEWLINE{$$ = $2; ++line_number; ++line_number;}
+    | Expression NEWLINE{$$ = $1; ++line_number;}
+    | NEWLINE {++line_number;}
 ;
 
-/* 
-////////////////////////////////////////////////////////////
 Expression
     : LogicalOrExpr ;
 LogicalOrExpr
-    : LogicalOrExpr LOR LogicalAndExpr { printf("LOR\n"); }
-    | LogicalAndExpr ;
+    : LogicalOrExpr LOR LogicalAndExpr {$$ = "bool"; printf("LOR\n");}
+    | LogicalAndExpr {$$ = $1;} ;
 LogicalAndExpr
-    : LogicalAndExpr LAND EqualityExpr { printf("LAND\n"); }
-    | EqualityExpr ;
+    : LogicalAndExpr LAND EqualityExpr {$$ = "bool"; printf("LAND\n");}
+    | EqualityExpr {$$ = $1;} ;
 EqualityExpr
-    : EqualityExpr '>' AddExpr { printf("GTR\n"); }
-    | AddExpr ;
+    : EqualityExpr '>' AddExpr {$$ = "bool"; printf("GTR\n");}
+    | AddExpr {$$ = $1;} ;
 AddExpr
-    : AddExpr '+' MulExpr { printf("ADD\n"); }
-    | AddExpr '-' MulExpr { printf("SUB\n"); }
-    | MulExpr ;
+    : AddExpr '+' MulExpr {$$ = (!strcmp($1,"f32")||!strcmp($3,"f32"))?"f32":"i32"; printf("ADD\n");}
+    | AddExpr '-' MulExpr {$$ = (!strcmp($1,"f32")||!strcmp($3,"f32"))?"f32":"i32"; printf("SUB\n");}
+    | MulExpr {$$ = $1;} ;
 MulExpr
-    : MulExpr '*' UnaryExpr { printf("MUL\n"); }
-    | MulExpr '/' UnaryExpr { printf("DIV\n"); }
-    | MulExpr '%' UnaryExpr { printf("REM\n"); }
-    | UnaryExpr ;
+    : MulExpr '*' UnaryExpr {$$ = (!strcmp($1,"f32")||!strcmp($3,"f32"))?"f32":"i32"; printf("MUL\n");}
+    | MulExpr '/' UnaryExpr {$$ = (!strcmp($1,"f32")||!strcmp($3,"f32"))?"f32":"i32"; printf("DIV\n");}
+    | MulExpr '%' UnaryExpr {$$ = (!strcmp($1,"f32")||!strcmp($3,"f32"))?"f32":"i32"; printf("REM\n");}
+    | UnaryExpr {$$ = $1;} ;
 UnaryExpr
-    : '-' UnaryExpr { printf("NEG\n"); }
-    | '!' UnaryExpr { printf("NOT\n"); }
-    | Porsche ;
-Porsche
-    : '(' Expression ')'
-    | LIT
-    | ID
-    | TRUE
-    | FALSE
-; */
-
-////////////////////////////////////////////////////////////
+    : '-' UnaryExpr {$$ = $2; printf("NEG\n");}
+    | '!' UnaryExpr {$$ = "bool"; printf("NOT\n");}
+    | NeverGonnaGiveYouUp {$$ = $1;} ;
+NeverGonnaGiveYouUp
+    : '(' Expression ')' {$$ = $2;} ;
+    | LIT {$$ = $1;}
+    | ID {$$ = lookup_symbol_type($1);}
+;
 
 /* Arithmetic
     : Arithmetic '+' Arithmetic {printf("ADD\n");}
