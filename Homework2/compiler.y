@@ -239,6 +239,12 @@ NeverGonnaGiveYouUp
     : '(' Expression ')' {$$ = $2;} ;
     | LIT {$$ = $1;}
     | ID {$$ = lookup_symbol_type($1); printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); }
+    | LIT AS Type 
+        {if(!strcmp($1, "f32") && !strcmp($3, "i32")) printf("f2i\n");                                                   // a05
+        else if (!strcmp($1, "i32") && !strcmp($3, "f32")) printf("i2f\n");}                                             // a05
+    | ID AS Type {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} 
+        {if(!strcmp(lookup_symbol_type($1), "f32") && !strcmp($3, "i32")) printf("f2i\n");                               // a05
+        else if (!strcmp(lookup_symbol_type($1), "i32") && !strcmp($3, "f32")) printf("i2f\n");}                         // a05
 ;
 
 /* Arithmetic
