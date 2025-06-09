@@ -123,6 +123,7 @@ Statement
     | NEWLINE {++line_number;}
     | Block
     | Ifstmt
+    | Whilestmt
 ;
 
 Ifstmt
@@ -133,6 +134,10 @@ Ifcond
     : ID  EQL ID  {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} {printf("IDENT (name=%s, address=%d)\n", $3, lookup_symbol_addr($3));} {printf("EQL\n");}
     | ID EQL {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} LIT  {printf("EQL\n");}
     | LIT EQL LIT {printf("EQL\n");}
+    | ID {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} '<' LIT {printf("LSS\n");}
+;
+Whilestmt
+    : WHILE Ifcond Block
 ;
 
 AssignStmt
