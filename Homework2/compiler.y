@@ -24,7 +24,7 @@
     /* parameters and return type can be changed */
     static void create_symbol();
     static void insert_symbol();
-    static void lookup_symbol();
+    static char* lookup_symbol();
     static void dump_symbol();
 
     /* Global variables */
@@ -44,7 +44,8 @@
     static int symbol_count[4] = {0};
     static int scope_level = -1;
     static int addr = -1;
-%}
+    static int line_number = 1;
+%};
 
 %error-verbose
 
@@ -56,13 +57,14 @@
     int i_val;
     float f_val;
     char *s_val;
+    bool b_val;
     /* ... */
-}
+};
 
 /* Token without return */
 %token LET MUT NEWLINE
 %token INT FLOAT BOOL STR
-%token TRUE FALSE
+/* %token TRUE FALSE */
 %token GEQ LEQ EQL NEQ LOR LAND
 %token ADD_ASSIGN SUB_ASSIGN MUL_ASSIGN DIV_ASSIGN REM_ASSIGN
 %token IF ELSE FOR WHILE LOOP
@@ -75,12 +77,16 @@
 %token <f_val> FLOAT_LIT
 %token <s_val> STRING_LIT
 %token <s_val> IDENT
+%token <b_val> TRUE
+%token <b_val> FALSE
 %token <s_val> ID
 /* %token <s_val> ID */
 
 /* Nonterminal with return, which need to sepcify type */
 %type <s_val> Type
 %type <s_val> LIT
+%type <s_val> PrintContent
+/* %type <s_val> Expression LogicalOrExpr LogicalAndExpr EqualityExpr AddExpr MulExpr UnaryExpr Porsche */
 
 /* Yacc will start at this nonterminal */
 %start Program
@@ -89,98 +95,89 @@
 %%
 
 Program
-    : {create_symbol();} GlobalStatementList {dump_symbol();}
+    : {create_symbol();} GlobalStatementList //{dump_symbol();} 
 ;
-
 GlobalStatementList 
     : GlobalStatementList GlobalStatement
-    | GlobalStatement
+    | GlobalStatement 
 ;
-
 GlobalStatement
     : FunctionDeclStmt
-    | NEWLINE
 ;
+
 
 FunctionDeclStmt
-    : Type ID '(' ')' {
-        printf("%s: %s\n",$1, $2);
-        insert_symbol($2, -1, $1, 0, 0, "(V)V");
-        create_symbol();
-    } Block {dump_symbol();}
-;
-
+    : FUNC ID {printf("func: %s\n", $2);} '(' ')' {insert_symbol($2, -1, "func", addr, line_number, "(V)V");} 
+    {create_symbol();} Block {dump_symbol();};
 Block
-    : '{' StatementList '}'
-;
-
+    : '{' StatementList '}' ;
 StatementList
-    : StatementList Statement
-    | /* empty */
-;
-
+    : StatementList Statement {line_number++;addr++;}
+    | /* empty */  ;
 Statement
-    : PrintStatement
-    | LETStatement
-    | NEWLINE
+    : AssignStmt
+    | PrintStatement
 ;
 
-LETStatement
-    : LET ID ':' Type '=' LIT ';'
+
+AssignStmt
+    : LET ID ':' Type '=' LIT ';' {printf("IDENT (name=%s, address=%d)\n", $2, addr); insert_symbol($2, 0, $6, addr, line_number, "-");}
+    | LET MUT ID ':' Type '=' LIT ';' {printf("IDENT (name=%s, address=%d)\n", $3, addr); insert_symbol($3, 1, $7, addr, line_number, "-");}
+    | LET MUT ID '=' LIT ';' {printf("IDENT (name=%s, address=%d)\n", $3, addr); insert_symbol($3, 1, $5, addr, line_number, "-");}
+    | ID '=' LIT ';' {printf("ASSIGN\n"); insert_symbol($1, 0, $3, addr, line_number, "-");}
+    | ID ADD_ASSIGN LIT ';' {printf("ADD_ASSIGN\n");}
+    | ID SUB_ASSIGN LIT ';' {printf("SUB_ASSIGN\n");}
+    | ID MUL_ASSIGN LIT ';' {printf("MUL_ASSIGN\n");}
+    | ID DIV_ASSIGN LIT ';' {printf("DIV_ASSIGN\n");}
+    | ID REM_ASSIGN LIT ';' {printf("REM_ASSIGN\n");}
 ;
 
 PrintStatement
-    : PRINTLN '(' PrintContent ')' ';'
-    | PRINT '(' PrintContent ')' ';'
-;
-
+    : PRINTLN '(' PrintContent ')' ';' {printf("PRINTLN %s\n", $3); }
+    | PRINT '(' PrintContent ')' ';' {printf("PRINTLN %s\n", $3); };
 PrintContent
-    : '"' STRING_LIT '"' {printf("PRINTLN str\n");}
-    | Expression {printf("PRINTLN Type\n");}
+    : LIT {$$ = $1;} 
+    | ID {$$ = lookup_symbol($1);}
+    /* | Expression {printf("PRINTLN %s\n", "typeR");} */
 ;
 
-
+/* 
 ////////////////////////////////////////////////////////////
 Expression
     : LogicalOrExpr ;
-
 LogicalOrExpr
     : LogicalOrExpr LOR LogicalAndExpr { printf("LOR\n"); }
     | LogicalAndExpr ;
-
 LogicalAndExpr
     : LogicalAndExpr LAND EqualityExpr { printf("LAND\n"); }
     | EqualityExpr ;
-
 EqualityExpr
     : EqualityExpr '>' AddExpr { printf("GTR\n"); }
     | AddExpr ;
-
 AddExpr
     : AddExpr '+' MulExpr { printf("ADD\n"); }
     | AddExpr '-' MulExpr { printf("SUB\n"); }
     | MulExpr ;
-
 MulExpr
     : MulExpr '*' UnaryExpr { printf("MUL\n"); }
     | MulExpr '/' UnaryExpr { printf("DIV\n"); }
     | MulExpr '%' UnaryExpr { printf("REM\n"); }
     | UnaryExpr ;
-
 UnaryExpr
     : '-' UnaryExpr { printf("NEG\n"); }
     | '!' UnaryExpr { printf("NOT\n"); }
-    | Primary ;
-
-Primary
+    | Porsche ;
+Porsche
     : '(' Expression ')'
     | LIT
     | ID
     | TRUE
-    | FALSE ;
+    | FALSE
+; */
 
 ////////////////////////////////////////////////////////////
-Arithmetic
+
+/* Arithmetic
     : Arithmetic '+' Arithmetic {printf("ADD\n");}
     | Arithmetic '-' Arithmetic {printf("SUB\n");}
     | Arithmetic '*' Arithmetic {printf("MUL\n");}
@@ -191,11 +188,10 @@ Arithmetic
     | Arithmetic LAND Arithmetic {printf("LAND\n");}
     | '!' Arithmetic {printf("NOT\n");}
     | '-' Arithmetic {printf("NEG\n");}
-    | TRUE | FALSE
     | ID
     | LIT
     | '(' Arithmetic ')' 
-    /* | Arithmetic '+' '(' Arithmetic ')' 
+    | Arithmetic '+' '(' Arithmetic ')' 
     | Arithmetic '-' '(' Arithmetic ')'
     | Arithmetic '*' '(' Arithmetic ')'
     | Arithmetic '/' '(' Arithmetic ')'
@@ -204,25 +200,25 @@ Arithmetic
     | '(' Arithmetic ')'  '-' Arithmetic
     | '(' Arithmetic ')'  '*' Arithmetic
     | '(' Arithmetic ')'  '/' Arithmetic
-    | '(' Arithmetic ')'  '%' Arithmetic */
-;
+    | '(' Arithmetic ')'  '%' Arithmetic 
+; */
 
 Type 
    : INT {$$ = "i32";}
    | FLOAT {$$ = "f32";}
    | BOOL {$$ = "bool";}
    | STR {$$ = "str";}
-   | ID {$$ = "ID";}
-   | FUNC {$$ = "func";}
-   | STRING_LIT {$$ = "STRING_LIT";}
-   | PRINTLN {$$ = "str";}
 ;
 
 LIT
-    : INT_LIT {printf("INT_LIT %d\n", $1);}
-    | FLOAT_LIT {printf("FLOAT_LIT %f\n", $1);}
-    | STRING_LIT {printf("STRING_LIT %s\n", $1);}
+    : INT_LIT {$$ = "i32"; printf("INT_LIT %d\n", $1);}
+    | FLOAT_LIT {$$ = "f32"; printf("FLOAT_LIT %f\n", $1);}
+    | STRING_LIT {$$ = "str"; printf("STRING_LIT %s\n", $1);}
+    | '"' STRING_LIT '"' {$$ = "str"; printf("STRING_LIT \"%s\"\n", $2);}
+    | TRUE {$$ = "bool";printf("bool TRUE\n");}
+    | FALSE {$$ = "bool";printf("bool FALSE\n");}
 ;
+
 %%
 
 
@@ -254,15 +250,24 @@ static void insert_symbol(char* name, int mut, char *type, int addr, int lineno,
     int index = symbol_count[scope_level];
     symbol_table[scope_level][index].index = index;
     symbol_table[scope_level][index].name = strdup(name);
-    /* symbol_table[scope_level][index].mut = mut;
+    symbol_table[scope_level][index].mut = mut;
     symbol_table[scope_level][index].type = strdup(type);
     symbol_table[scope_level][index].addr = addr;
     symbol_table[scope_level][index].lineno = lineno;
-    symbol_table[scope_level][index].func_sig = strdup(func_sig); */
+    symbol_table[scope_level][index].func_sig = strdup(func_sig);
     symbol_count[scope_level]++;
 }
 
-static void lookup_symbol() {
+static char* lookup_symbol(char* target) {
+    char* same = NULL;
+    for(int i=scope_level; i>=0;i--){
+        for(int j =0; j<symbol_count[i]; j++){
+            if(0 ==  strcmp(target,symbol_table[i][j].name)){
+                same = symbol_table[i][j].type;
+            }
+        }
+    }
+    return same;
 }
 
 static void dump_symbol() {
