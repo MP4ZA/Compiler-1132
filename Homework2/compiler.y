@@ -139,6 +139,11 @@ Ifcond
     : ID  EQL ID  {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} {printf("IDENT (name=%s, address=%d)\n", $3, lookup_symbol_addr($3));} {printf("EQL\n");}
     | ID EQL {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} LIT  {printf("EQL\n");}
     | LIT EQL LIT {printf("EQL\n");}
+    
+    | ID  NEQ ID  {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} {printf("IDENT (name=%s, address=%d)\n", $3, lookup_symbol_addr($3));} {printf("NEQ\n");}
+    | ID NEQ {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} LIT  {printf("NEQ\n");}
+    | LIT NEQ LIT {printf("NEQ\n");}
+
     | ID {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} '<' LIT {printf("LSS\n");}
     | ID {
         if(0 == strcmp(lookup_symbol_type($1), "undefined"))
