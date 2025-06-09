@@ -24,7 +24,7 @@ fnumber ({digit}*\.{digit}+)
 %%
 
 "/*"        { BEGIN(CMT); }
-<CMT>\r?\n   { ; }
+<CMT>\r?\n   { return NEWLINE; }
 <CMT>.     { ; }
 <CMT>"*/"      { BEGIN(INITIAL); }
 "//".*      {;}
@@ -37,7 +37,7 @@ fnumber ({digit}*\.{digit}+)
 <STRCOND>(\\\"|[^\"])* { yylval.s_val = strdup(yytext);
                 return STRING_LIT;
             }
-\r?\n       {;}
+\r?\n       { return NEWLINE;}
 "str"       { return STR; }
 ">>"        { return RSHIFT; }
 "<<"        { return LSHIFT; }

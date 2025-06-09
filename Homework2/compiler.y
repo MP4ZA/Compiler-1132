@@ -24,7 +24,8 @@
     /* parameters and return type can be changed */
     static void create_symbol();
     static void insert_symbol();
-    static char* lookup_symbol();
+    static char* lookup_symbol_type();
+    static int lookup_symbol_addr();
     static void dump_symbol();
 
     /* Global variables */
@@ -43,7 +44,7 @@
     static Symbol symbol_table[4][10];  // [scope][Index]
     static int symbol_count[4] = {0};
     static int scope_level = -1;
-    static int addr = -1;
+    static int addr = -2;
     static int line_number = 1;
 %};
 
@@ -100,36 +101,39 @@ Program
 GlobalStatementList 
     : GlobalStatementList GlobalStatement
     | GlobalStatement 
+    | NEWLINE {++line_number;}
 ;
 GlobalStatement
     : FunctionDeclStmt
+    | NEWLINE {++line_number;}
 ;
 
 
 FunctionDeclStmt
-    : FUNC ID {printf("func: %s\n", $2);} '(' ')' {insert_symbol($2, -1, "func", addr, line_number, "(V)V");} 
+    : FUNC ID {printf("func: %s\n", $2);} '(' ')' {insert_symbol($2, -1, "func",  line_number, "(V)V");} 
     {create_symbol();} Block {dump_symbol();};
 Block
     : '{' StatementList '}' ;
 StatementList
-    : StatementList Statement {line_number++;addr++;}
+    : StatementList Statement 
     | /* empty */  ;
 Statement
     : AssignStmt
     | PrintStatement
+    | NEWLINE {++line_number;}
 ;
 
 
 AssignStmt
-    : LET ID ':' Type '=' LIT ';' {printf("IDENT (name=%s, address=%d)\n", $2, addr); insert_symbol($2, 0, $6, addr, line_number, "-");}
-    | LET MUT ID ':' Type '=' LIT ';' {printf("IDENT (name=%s, address=%d)\n", $3, addr); insert_symbol($3, 1, $7, addr, line_number, "-");}
-    | LET MUT ID '=' LIT ';' {printf("IDENT (name=%s, address=%d)\n", $3, addr); insert_symbol($3, 1, $5, addr, line_number, "-");}
-    | ID '=' LIT ';' {printf("ASSIGN\n"); insert_symbol($1, 0, $3, addr, line_number, "-");}
-    | ID ADD_ASSIGN LIT ';' {printf("ADD_ASSIGN\n");}
-    | ID SUB_ASSIGN LIT ';' {printf("SUB_ASSIGN\n");}
-    | ID MUL_ASSIGN LIT ';' {printf("MUL_ASSIGN\n");}
-    | ID DIV_ASSIGN LIT ';' {printf("DIV_ASSIGN\n");}
-    | ID REM_ASSIGN LIT ';' {printf("REM_ASSIGN\n");}
+    : LET ID ':' Type '=' LIT ';' {insert_symbol($2, 0, $6, line_number, "-");printf("IDENT (name=%s, address=%d)\n", $2, addr); }
+    | LET MUT ID ':' Type '=' LIT ';' {insert_symbol($3, 1, $7, line_number, "-");printf("IDENT (name=%s, address=%d)\n", $3, addr); }
+    | LET MUT ID '=' LIT ';' {insert_symbol($3, 1, $5, line_number, "-");printf("IDENT (name=%s, address=%d)\n", $3, addr); }
+    | ID '=' LIT ';' {printf("ASSIGN\n"); printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); }
+    | ID ADD_ASSIGN LIT ';' {printf("ADD_ASSIGN\n");printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); }
+    | ID SUB_ASSIGN LIT ';' {printf("SUB_ASSIGN\n");printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); }
+    | ID MUL_ASSIGN LIT ';' {printf("MUL_ASSIGN\n");printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); }
+    | ID DIV_ASSIGN LIT ';' {printf("DIV_ASSIGN\n");printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); }
+    | ID REM_ASSIGN LIT ';' {printf("REM_ASSIGN\n");printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); }
 ;
 
 PrintStatement
@@ -137,7 +141,7 @@ PrintStatement
     | PRINT '(' PrintContent ')' ';' {printf("PRINTLN %s\n", $3); };
 PrintContent
     : LIT {$$ = $1;} 
-    | ID {$$ = lookup_symbol($1);}
+    | ID {$$ = lookup_symbol_type($1);}
     /* | Expression {printf("PRINTLN %s\n", "typeR");} */
 ;
 
@@ -208,6 +212,7 @@ Type
    | FLOAT {$$ = "f32";}
    | BOOL {$$ = "bool";}
    | STR {$$ = "str";}
+   | '&' Type {$$ = $2;}
 ;
 
 LIT
@@ -215,6 +220,7 @@ LIT
     | FLOAT_LIT {$$ = "f32"; printf("FLOAT_LIT %f\n", $1);}
     | STRING_LIT {$$ = "str"; printf("STRING_LIT %s\n", $1);}
     | '"' STRING_LIT '"' {$$ = "str"; printf("STRING_LIT \"%s\"\n", $2);}
+    | '"' '"' {$$ = "str"; printf("STRING_LIT \"\"\n");}
     | TRUE {$$ = "bool";printf("bool TRUE\n");}
     | FALSE {$$ = "bool";printf("bool FALSE\n");}
 ;
@@ -244,30 +250,42 @@ static void create_symbol() {
 
 }
 
-static void insert_symbol(char* name, int mut, char *type, int addr, int lineno, char *func_sig) {
-    printf("> Insert `%s` (addr: %d) to scope level %d\n", name, addr, scope_level);
-
+static void insert_symbol(char* name, int mut, char *type, int lineno, char *func_sig) {
     int index = symbol_count[scope_level];
     symbol_table[scope_level][index].index = index;
     symbol_table[scope_level][index].name = strdup(name);
     symbol_table[scope_level][index].mut = mut;
     symbol_table[scope_level][index].type = strdup(type);
-    symbol_table[scope_level][index].addr = addr;
+    symbol_table[scope_level][index].addr = ++addr;
     symbol_table[scope_level][index].lineno = lineno;
     symbol_table[scope_level][index].func_sig = strdup(func_sig);
     symbol_count[scope_level]++;
+
+    printf("> Insert `%s` (addr: %d) to scope level %d\n", name, addr, scope_level);
 }
 
-static char* lookup_symbol(char* target) {
-    char* same = NULL;
+static char* lookup_symbol_type(char* ID_name) {
+    char* SameType = NULL;
     for(int i=scope_level; i>=0;i--){
         for(int j =0; j<symbol_count[i]; j++){
-            if(0 ==  strcmp(target,symbol_table[i][j].name)){
-                same = symbol_table[i][j].type;
+            if(0 ==  strcmp(ID_name,symbol_table[i][j].name)){
+                SameType = symbol_table[i][j].type;
             }
         }
     }
-    return same;
+    return SameType;
+}
+
+static int lookup_symbol_addr(char* ID_name) {
+    int addregera = -1;
+    for(int i=scope_level; i>=0;i--){
+        for(int j =0; j<symbol_count[i]; j++){
+            if(0 ==  strcmp(ID_name,symbol_table[i][j].name)){
+                addregera = symbol_table[i][j].addr;
+            }
+        }
+    }
+    return addregera;
 }
 
 static void dump_symbol() {
