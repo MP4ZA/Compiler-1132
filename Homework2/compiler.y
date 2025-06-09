@@ -26,6 +26,7 @@
     static void insert_symbol();
     static char* lookup_symbol_type();
     static int lookup_symbol_addr();
+    static int lookup_symbol_mut();
     static void dump_symbol();
     // static void write();
     // static int read();
@@ -91,7 +92,7 @@
 %type <s_val> Type
 %type <s_val> LIT
 %type <s_val> PrintContent
-%type <s_val> Expression LogicalOrExpr LogicalAndExpr EqualityExpr AddExpr MulExpr UnaryExpr NeverGonnaGiveYouUp
+%type <s_val> Expression LogicalOrExpr LogicalAndExpr EqualityExpr SHIFTING AddExpr MulExpr UnaryExpr NeverGonnaGiveYouUp
 
 /* Yacc will start at this nonterminal */
 %start Program
@@ -139,6 +140,15 @@ Ifcond
     | ID EQL {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} LIT  {printf("EQL\n");}
     | LIT EQL LIT {printf("EQL\n");}
     | ID {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} '<' LIT {printf("LSS\n");}
+    | ID {
+        if(0 == strcmp(lookup_symbol_type($1), "undefined"))
+            printf("error:%d: undefined: %s\n", line_number, $1);
+        else
+            printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} 
+    '>' LIT {
+        if(lookup_symbol_type($1) != $4)                                                                                                                // a09
+            printf("error:%d: invalid operation: GTR (mismatched types %s and %s)\n",line_number, lookup_symbol_type($1), $4);                       // a09
+        printf("GTR\n");}      // a09
 ;
 Whilestmt
     : WHILE Ifcond Block
@@ -149,21 +159,35 @@ AssignStmt
     | LET MUT ID ':' Type '=' LIT ';' {insert_symbol($3, 1, $7, line_number, "-");}
     | LET MUT ID '=' LIT ';' {insert_symbol($3, 1, $5, line_number, "-");}
     | LET MUT ID ':' Type ';' {insert_symbol($3, 1, $5, line_number, "-");}             // a05
-    | ID '=' LIT ';' {printf("ASSIGN\n");}
+    | ID '=' LIT ';' {
+        if(0 == strcmp(lookup_symbol_type($1), "undefined"))
+            printf("error:%d: undefined: %s\n", line_number, $1);
+        else{
+            printf("ASSIGN\n");
+            if(0 == lookup_symbol_mut($1))
+                printf("error:%d: cannot borrow immutable borrowed content `%s` as mutable\n", line_number, $1);
+        }}
     | ID ADD_ASSIGN LIT ';' {printf("ADD_ASSIGN\n");}
     | ID SUB_ASSIGN LIT ';' {printf("SUB_ASSIGN\n");}
     | ID MUL_ASSIGN LIT ';' {printf("MUL_ASSIGN\n");}
     | ID DIV_ASSIGN LIT ';' {printf("DIV_ASSIGN\n");}
     | ID REM_ASSIGN LIT ';' {printf("REM_ASSIGN\n");}
-    | ID '=' Expression ';'
+    | ID '=' Expression ';' {
+        if(0 == strcmp(lookup_symbol_type($1), "undefined"))
+            printf("error:%d: undefined: %s\n", line_number, $1);
+        else{
+            printf("ASSIGN\n");
+            if(0 == lookup_symbol_mut($1))
+                printf("error:%d: cannot borrow immutable borrowed content `%s` as mutable\n", line_number, $1);
+        }}
     | LET ID ':' ARRAY {insert_symbol($2, 0, "array", line_number, "-");}              // a08
 ;
 
 ARRAY
     : '[' Type ';' LIT ']' '=' '[' VALUE ']' ';' ;                                       // a08
 VALUE
-    : LIT ',' VALUE // {write(length++, $1);}
-    | LIT // {write(length++, $1);}
+    : LIT ',' VALUE 
+    | LIT
 ;
 
 PrintStatement
@@ -189,7 +213,14 @@ LogicalAndExpr
     : LogicalAndExpr LAND EqualityExpr {$$ = "bool"; printf("LAND\n");}
     | EqualityExpr {$$ = $1;} ;
 EqualityExpr
-    : EqualityExpr '>' AddExpr {$$ = "bool"; printf("GTR\n");}
+    : EqualityExpr '>' SHIFTING {$$ = "bool"; printf("GTR\n");}
+    | SHIFTING {$$ = $1;} ;
+SHIFTING
+    : SHIFTING LSHIFT AddExpr {$$ = "i32"; 
+        if($1 != $3)                                                                                                                // a09
+            printf("error:%d: invalid operation: LSHIFT (mismatched types %s and %s)\n",line_number, $1, $3);                       // a09
+        printf("LSHIFT\n");}
+    | SHIFTING RSHIFT AddExpr {$$ = "i32"; printf("RSHIFT\n");}
     | AddExpr {$$ = $1;} ;
 AddExpr
     : AddExpr '+' MulExpr {$$ = (!strcmp($1,"f32")||!strcmp($3,"f32"))?"f32":"i32"; printf("ADD\n");}
@@ -294,7 +325,7 @@ static void insert_symbol(char* name, int mut, char *type, int lineno, char *fun
 }
 
 static char* lookup_symbol_type(char* ID_name) {
-    char* SameType = NULL;
+    char* SameType = "undefined";
     for(int i=scope_level; i>=0;i--){
         for(int j =0; j<symbol_count[i]; j++){
             if(0 ==  strcmp(ID_name,symbol_table[i][j].name)){
@@ -317,6 +348,19 @@ static int lookup_symbol_addr(char* ID_name) {
         }
     }
     return addregera;
+}
+
+static int lookup_symbol_mut(char* ID_name) {
+    int mutable = 0;
+    for(int i=scope_level; i>=0;i--){
+        for(int j =0; j<symbol_count[i]; j++){
+            if(0 ==  strcmp(ID_name,symbol_table[i][j].name)){
+                mutable = symbol_table[i][j].mut;
+                return mutable;
+            }
+        }
+    }
+    return mutable;
 }
 
 /* static void write(int i, int val){
