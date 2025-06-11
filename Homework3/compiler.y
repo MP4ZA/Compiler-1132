@@ -63,6 +63,23 @@
     static int scope_level = -1;
     static int addr = -1;
     static int line_number = 1;
+    static int toOne = 1;
+    static int notend = 1;
+    
+    static int L_True = 1;
+    static int L_false = 1;
+    static int L_if_exit = 1;
+    static int L_exit = 1;
+
+    static int L_right = 1;
+    static int L_if_false = 1;
+    static int L_if_True = 1;
+    static int end = 1;
+
+    static int True_first = 1;
+    static int True_second = 1;
+    static int False_second = 1;
+    static int the_end = 1;
 %}
 
 %error-verbose
@@ -75,6 +92,7 @@
     int i_val;
     float f_val;
     char *s_val;
+    bool b_val;
     /* ... */
 }
 
@@ -226,15 +244,6 @@ PrintStatement
         CODEGEN("getstatic java/lang/System/out Ljava/io/PrintStream;\n");   
     } 
       PrintContent ')' ';' {
-        // if(!strcmp($4, "i32")){
-        //     printf("OK\n");
-        //     CODEGEN("invokevirtual java/io/PrintStream/println(I)V\n");
-        // }else if(!strcmp($4, "str")){
-        //     printf("WTF\n");
-        //     CODEGEN("invokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
-        // }
-
-
         if(!strcmp($4, "i32")){
             CODEGEN("invokevirtual java/io/PrintStream/println(I)V\n");
         }else if(!strcmp($4, "f32")){
@@ -242,14 +251,39 @@ PrintStatement
         }else if(!strcmp($4, "str")){
             CODEGEN("invokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
         }else if(!strcmp($4, "bool")){
-            CODEGEN("invokevirtual java/io/PrintStream/println(I)V\n");
+            int cur = toOne++;
+            int end = notend++;
+            CODEGEN("ifeq print_false_%d\n", cur);       // 如果為 0，跳去印 false
+            CODEGEN("ldc \"true\"\n");
+            CODEGEN("goto print_end_%d\n", end);
+            CODEGEN("print_false_%d:\n", cur);
+            CODEGEN("ldc \"false\"\n");
+            CODEGEN("print_end_%d:\n", end);
+            CODEGEN("invokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
         }
-
     }
-    | PRINT '(' 
-      {CODEGEN("getstatic java/lang/System/out Ljava/io/PrintStream;\n");}
-      PrintContent ')' ';' 
-      {CODEGEN("invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");}
+    | PRINT '(' {
+        CODEGEN("getstatic java/lang/System/out Ljava/io/PrintStream;\n");
+    }
+      PrintContent ')' ';' {
+        if(!strcmp($4, "i32")){
+            CODEGEN("invokevirtual java/io/PrintStream/println(I)V\n");
+        }else if(!strcmp($4, "f32")){
+            CODEGEN("invokevirtual java/io/PrintStream/println(F)V\n");
+        }else if(!strcmp($4, "str")){
+            CODEGEN("invokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
+        }else if(!strcmp($4, "bool")){
+            int cur = toOne++;
+            int end = notend++;
+            CODEGEN("ifeq print_false_%d\n", cur);       // 如果為 0，跳去印 false
+            CODEGEN("ldc \"true\"\n");
+            CODEGEN("goto print_end_%d\n", end);
+            CODEGEN("print_false_%d:\n", cur);
+            CODEGEN("ldc \"false\"\n");
+            CODEGEN("print_end_%d:\n", end);
+            CODEGEN("invokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
+        }
+    }
 PrintContent
     : LIT {$$ = $1;} 
     | Expression {$$ = $1;}
@@ -263,13 +297,69 @@ PrintContent
 Expression
     : LogicalOrExpr ;
 LogicalOrExpr
-    : LogicalOrExpr LOR LogicalAndExpr {$$ = "bool"; printf("LOR\n");}
+    : LogicalOrExpr LOR LogicalAndExpr {
+        $$ = "bool"; 
+        printf("LOR\n");
+
+        CODEGEN("ifne True_first%d\n", True_first);
+        CODEGEN("ifne True_second%d\n", True_second);
+        CODEGEN("goto False_second%d\n", False_second);
+        CODEGEN("True_first%d:\n", True_first++);
+        CODEGEN("    pop\n");
+        CODEGEN("True_second%d:\n", True_second++);
+        CODEGEN("    iconst_1\n");
+        CODEGEN("    goto the_end%d\n", the_end);
+        CODEGEN("False_second%d:\n", False_second++);
+        CODEGEN("    iconst_0\n");
+        CODEGEN("the_end%d:\n", the_end++);
+    }
     | LogicalAndExpr {$$ = $1;} ;
 LogicalAndExpr
-    : LogicalAndExpr LAND EqualityExpr {$$ = "bool"; printf("LAND\n");}
+    : LogicalAndExpr LAND EqualityExpr {
+        $$ = "bool"; 
+        printf("LAND\n");
+        CODEGEN("    ifne L_right%d\n", L_right);
+        CODEGEN("    pop\n");
+        CODEGEN("    goto L_if_false%d\n", L_if_false);
+        CODEGEN("L_right%d:\n", L_right++);
+        CODEGEN("    ifne L_if_True%d\n", L_if_True);
+        CODEGEN("    goto L_if_false%d\n", L_if_false);
+        CODEGEN("L_if_True%d:\n", L_if_True++);
+        CODEGEN("    iconst_1\n");
+        CODEGEN("    goto end%d\n", end);
+        CODEGEN("L_if_false%d:\n", L_if_false++);
+        CODEGEN("    iconst_0\n");
+        CODEGEN("end%d:\n", end++);
+    }
     | EqualityExpr {$$ = $1;} ;
 EqualityExpr
-    : EqualityExpr '>' SHIFTING {$$ = "bool"; printf("GTR\n");}
+    : EqualityExpr '>' SHIFTING {
+        $$ = "bool"; 
+        if(!strcmp($1,"f32")||!strcmp($3,"f32")){
+            CODEGEN("fcmpl\n");
+            CODEGEN("ifle L_false%d\n", L_false);
+            CODEGEN("    iconst_1\n");
+            CODEGEN("    goto L_exit%d\n",L_exit);
+            CODEGEN("L_false%d:\n",L_false++);
+            CODEGEN("    iconst_0\n");
+            CODEGEN("L_exit%d:\n", L_exit++);
+            // CODEGEN("if_icmpgt L_True%d\n", L_True);
+            // CODEGEN("L_false%d:\n", L_false++);
+            // CODEGEN("   iconst_0\n");
+            // CODEGEN("   goto L_if_exit%d\n", L_if_exit);
+            // CODEGEN("L_True%d:\n", L_True++);
+            // CODEGEN("   iconst_1\n");
+            // CODEGEN("L_if_exit%d:\n", L_if_exit++);     
+        }else{
+            CODEGEN("if_icmpgt L_True%d\n", L_True);
+            CODEGEN("L_false%d:\n", L_false++);
+            CODEGEN("   iconst_0\n");
+            CODEGEN("   goto L_if_exit%d\n", L_if_exit);
+            CODEGEN("L_True%d:\n", L_True++);
+            CODEGEN("   iconst_1\n");
+            CODEGEN("L_if_exit%d:\n", L_if_exit++);
+        }
+    }
     | SHIFTING {$$ = $1;} ;
 SHIFTING
     : SHIFTING LSHIFT AddExpr {$$ = "i32"; 
@@ -316,7 +406,18 @@ UnaryExpr
             CODEGEN("fneg\n");
         }
     }
-    | '!' UnaryExpr {$$ = "bool"; printf("NOT\n");}
+    | '!' UnaryExpr {
+        $$ = "bool"; 
+        printf("NOT\n");
+        CODEGEN("ifeq toOne_%d\n", toOne);
+        CODEGEN("    iconst_0\n");
+        CODEGEN("    goto notend_%d\n", notend);
+        CODEGEN("toOne_%d:\n", toOne++);
+        CODEGEN("    iconst_1\n");
+        CODEGEN("    goto notend_%d\n", notend);
+        CODEGEN("notend_%d:\n", notend++);
+
+    }
     | NeverGonnaGiveYouUp {$$ = $1;} ;
 NeverGonnaGiveYouUp
     : '(' Expression ')' {$$ = $2;} ;
@@ -358,8 +459,8 @@ LIT
     | STRING_LIT {$$ = "str"; CODEGEN("ldc \"%s\"\n", $1);}
     | '"' STRING_LIT '"' {$$ = "str"; CODEGEN("ldc \"%s\"\n", $2);}
     | '"' '"' {$$ = "str"; printf("STRING_LIT \"\"\n");}
-    | TRUE {$$ = "bool";printf("bool TRUE\n");}
-    | FALSE {$$ = "bool";printf("bool FALSE\n");}
+    | TRUE {$$ = "bool";printf("bool TRUE\n"); CODEGEN("iconst_1\n");}
+    | FALSE {$$ = "bool";printf("bool FALSE\n"); CODEGEN("iconst_0\n");}
 ;
 %%
 
