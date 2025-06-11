@@ -61,7 +61,7 @@
     static Symbol symbol_table[4][10];
     static int symbol_count[4] = {0};
     static int scope_level = -1;
-    static int addr = -2;
+    static int addr = -1;
     static int line_number = 1;
 %}
 
@@ -179,7 +179,14 @@ Whilestmt
 ;
 
 AssignStmt
-    : LET ID ':' Type '=' LIT ';' {insert_symbol($2, 0, $6, line_number, "-");}
+    : LET ID ':' Type '=' LIT ';' {insert_symbol($2, 0, $6, line_number, "-"); 
+        if(!strcmp($4, "i32")){
+            CODEGEN("istore %d\n", addr);
+        }
+        else if (!strcmp($4, "f32")){
+            CODEGEN("fstore %d\n", addr);
+        }
+    }
     | LET MUT ID ':' Type '=' LIT ';' {insert_symbol($3, 1, $7, line_number, "-");}
     | LET MUT ID '=' LIT ';' {insert_symbol($3, 1, $5, line_number, "-");}
     | LET MUT ID ':' Type ';' {insert_symbol($3, 1, $5, line_number, "-");}             // a05
@@ -215,12 +222,34 @@ VALUE
 ;
 
 PrintStatement
-    : PRINTLN '(' 
-      {CODEGEN("getstatic java/lang/System/out Ljava/io/PrintStream;\n");} 
+    : PRINTLN '(' {
+        CODEGEN("getstatic java/lang/System/out Ljava/io/PrintStream;\n");   
+    } 
+      PrintContent ')' ';' {
+        // if(!strcmp($4, "i32")){
+        //     printf("OK\n");
+        //     CODEGEN("invokevirtual java/io/PrintStream/println(I)V\n");
+        // }else if(!strcmp($4, "str")){
+        //     printf("WTF\n");
+        //     CODEGEN("invokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
+        // }
+
+
+        if(!strcmp($4, "i32")){
+            CODEGEN("invokevirtual java/io/PrintStream/println(I)V\n");
+        }else if(!strcmp($4, "f32")){
+            CODEGEN("invokevirtual java/io/PrintStream/println(F)V\n");
+        }else if(!strcmp($4, "str")){
+            CODEGEN("invokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");
+        }else if(!strcmp($4, "bool")){
+            CODEGEN("invokevirtual java/io/PrintStream/println(I)V\n");
+        }
+
+    }
+    | PRINT '(' 
+      {CODEGEN("getstatic java/lang/System/out Ljava/io/PrintStream;\n");}
       PrintContent ')' ';' 
-      // {CODEGEN("ldc \"%s\"\n", $3);}
-      {CODEGEN("invokevirtual java/io/PrintStream/println(Ljava/lang/String;)V\n");}
-    | PRINT '(' PrintContent ')' ';' {printf("PRINT %s\n", $3); };
+      {CODEGEN("invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V\n");}
 PrintContent
     : LIT {$$ = $1;} 
     | Expression {$$ = $1;}
@@ -250,28 +279,69 @@ SHIFTING
     | SHIFTING RSHIFT AddExpr {$$ = "i32"; printf("RSHIFT\n");}
     | AddExpr {$$ = $1;} ;
 AddExpr
-    : AddExpr '+' MulExpr {$$ = (!strcmp($1,"f32")||!strcmp($3,"f32"))?"f32":"i32"; printf("ADD\n");}
-    | AddExpr '-' MulExpr {$$ = (!strcmp($1,"f32")||!strcmp($3,"f32"))?"f32":"i32"; printf("SUB\n");}
+    : AddExpr '+' MulExpr {
+        $$ = (!strcmp($1,"f32")||!strcmp($3,"f32"))?"f32":"i32";  
+        
+        if(!strcmp($1,"f32")||!strcmp($3,"f32"))CODEGEN("fadd\n");
+        else CODEGEN("iadd\n");
+    }
+    | AddExpr '-' MulExpr {
+        $$ = (!strcmp($1,"f32")||!strcmp($3,"f32"))?"f32":"i32"; 
+        if(!strcmp($1,"f32")||!strcmp($3,"f32"))CODEGEN("fsub\n");
+        else CODEGEN("isub\n");
+    }
     | MulExpr {$$ = $1;} ;
 MulExpr
-    : MulExpr '*' UnaryExpr {$$ = (!strcmp($1,"f32")||!strcmp($3,"f32"))?"f32":"i32"; printf("MUL\n");}
-    | MulExpr '/' UnaryExpr {$$ = (!strcmp($1,"f32")||!strcmp($3,"f32"))?"f32":"i32"; printf("DIV\n");}
-    | MulExpr '%' UnaryExpr {$$ = (!strcmp($1,"f32")||!strcmp($3,"f32"))?"f32":"i32"; printf("REM\n");}
+    : MulExpr '*' UnaryExpr {
+        $$ = (!strcmp($1,"f32")||!strcmp($3,"f32"))?"f32":"i32"; 
+        if(!strcmp($1,"f32")||!strcmp($3,"f32"))CODEGEN("fmul\n");
+        else CODEGEN("imul\n");
+    }
+    | MulExpr '/' UnaryExpr {
+        $$ = (!strcmp($1,"f32")||!strcmp($3,"f32"))?"f32":"i32"; 
+        if(!strcmp($1,"f32")||!strcmp($3,"f32"))CODEGEN("fdiv\n");
+        else CODEGEN("idiv\n");
+    }
+    | MulExpr '%' UnaryExpr {
+        $$ = (!strcmp($1,"f32")||!strcmp($3,"f32"))?"f32":"i32"; 
+        if(!strcmp($1,"f32")||!strcmp($3,"f32"));
+        else CODEGEN("irem\n");
+    }
     | UnaryExpr {$$ = $1;} ;
 UnaryExpr
-    : '-' UnaryExpr {$$ = $2; printf("NEG\n");}
+    : '-' UnaryExpr {$$ = $2; 
+        if(!strcmp($2, "i32")){
+            CODEGEN("ineg\n");
+        }else if(!strcmp($2, "f32")){
+            CODEGEN("fneg\n");
+        }
+    }
     | '!' UnaryExpr {$$ = "bool"; printf("NOT\n");}
     | NeverGonnaGiveYouUp {$$ = $1;} ;
 NeverGonnaGiveYouUp
     : '(' Expression ')' {$$ = $2;} ;
     | LIT {$$ = $1;}
-    | ID {$$ = lookup_symbol_type($1); printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); }
+    | ID {
+        $$ = lookup_symbol_type($1); 
+        // CODEGEN("istore %d\n", lookup_symbol_addr($1));
+        // CODEGEN("iload %d\n", lookup_symbol_addr($1));
+        if(!strcmp(lookup_symbol_type($1), "i32")){
+            CODEGEN("iload %d\n", lookup_symbol_addr($1));
+        }else if(!strcmp(lookup_symbol_type($1), "f32")){
+            CODEGEN("fload %d\n", lookup_symbol_addr($1));
+        }else if(!strcmp(lookup_symbol_type($1), "str")){
+            CODEGEN("aload %d\n", lookup_symbol_addr($1));
+        }else if(!strcmp(lookup_symbol_type($1), "bool")){
+            CODEGEN("iload %d\n", lookup_symbol_addr($1));
+        }
+        printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); 
+    }
     | LIT AS Type 
-        {if(!strcmp($1, "f32") && !strcmp($3, "i32")) printf("f2i\n");                                                   // a05
-        else if (!strcmp($1, "i32") && !strcmp($3, "f32")) printf("i2f\n");}                                             // a05
+        {if(!strcmp($1, "f32") && !strcmp($3, "i32")) CODEGEN("f2i\n");                                                   // a05
+        else if (!strcmp($1, "i32") && !strcmp($3, "f32")) CODEGEN("i2f\n");}                                             // a05
     | ID AS Type {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} 
-        {if(!strcmp(lookup_symbol_type($1), "f32") && !strcmp($3, "i32")) printf("f2i\n");                               // a05
-        else if (!strcmp(lookup_symbol_type($1), "i32") && !strcmp($3, "f32")) printf("i2f\n");}                         // a05
+        {if(!strcmp(lookup_symbol_type($1), "f32") && !strcmp($3, "i32")) CODEGEN("f2i\n");                               // a05
+        else if (!strcmp(lookup_symbol_type($1), "i32") && !strcmp($3, "f32")) CODEGEN("i2f\n");}                         // a05
 ;
 
 Type 
@@ -285,8 +355,8 @@ Type
 LIT
     : INT_LIT {$$ = "i32"; CODEGEN("ldc %d\n", $1);}
     | FLOAT_LIT {$$ = "f32"; CODEGEN("ldc %f\n", $1);}
-    | STRING_LIT {$$ = "str"; printf("??????????\n");CODEGEN("ldc \"%s\"\n", $1);}
-    | '"' STRING_LIT '"' {$$ = "str"; printf("??????????\n");CODEGEN("ldc \"%s\"\n", $2);}
+    | STRING_LIT {$$ = "str"; CODEGEN("ldc \"%s\"\n", $1);}
+    | '"' STRING_LIT '"' {$$ = "str"; CODEGEN("ldc \"%s\"\n", $2);}
     | '"' '"' {$$ = "str"; printf("STRING_LIT \"\"\n");}
     | TRUE {$$ = "bool";printf("bool TRUE\n");}
     | FALSE {$$ = "bool";printf("bool FALSE\n");}
