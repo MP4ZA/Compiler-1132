@@ -203,32 +203,128 @@ AssignStmt
         }
         else if (!strcmp($4, "f32")){
             CODEGEN("fstore %d\n", addr);
+        }else if (!strcmp($4, "str")){
+            CODEGEN("astore %d\n", addr);
+        }else if (!strcmp($4, "bool")){
+            CODEGEN("istore %d\n", addr);
         }
     }
-    | LET MUT ID ':' Type '=' LIT ';' {insert_symbol($3, 1, $7, line_number, "-");}
+    | LET MUT ID ':' Type '=' LIT ';' {insert_symbol($3, 1, $7, line_number, "-");
+        if(!strcmp($5, "i32")){
+            CODEGEN("istore %d\n", addr);
+        }else if (!strcmp($5, "f32")){
+            CODEGEN("fstore %d\n", addr);
+        }else if (!strcmp($5, "str")){
+            CODEGEN("astore %d\n", addr);
+        }else if (!strcmp($5, "bool")){
+            CODEGEN("istore %d\n", addr);
+        }
+    }
     | LET MUT ID '=' LIT ';' {insert_symbol($3, 1, $5, line_number, "-");}
     | LET MUT ID ':' Type ';' {insert_symbol($3, 1, $5, line_number, "-");}             // a05
     | ID '=' LIT ';' {
-        if(0 == strcmp(lookup_symbol_type($1), "undefined"))
-            printf("error:%d: undefined: %s\n", line_number, $1);
-        else{
-            printf("ASSIGN\n");
-            if(0 == lookup_symbol_mut($1))
-                printf("error:%d: cannot borrow immutable borrowed content `%s` as mutable\n", line_number, $1);
-        }}
-    | ID ADD_ASSIGN LIT ';' {printf("ADD_ASSIGN\n");}
-    | ID SUB_ASSIGN LIT ';' {printf("SUB_ASSIGN\n");}
-    | ID MUL_ASSIGN LIT ';' {printf("MUL_ASSIGN\n");}
-    | ID DIV_ASSIGN LIT ';' {printf("DIV_ASSIGN\n");}
-    | ID REM_ASSIGN LIT ';' {printf("REM_ASSIGN\n");}
+        if(!strcmp(lookup_symbol_type($1), "i32")){
+            CODEGEN("istore %d\n", lookup_symbol_addr($1));
+        }else if (!strcmp(lookup_symbol_type($1), "f32")){
+            CODEGEN("fstore %d\n", lookup_symbol_addr($1));
+        }else if (!strcmp(lookup_symbol_type($1), "str")){
+            CODEGEN("astore %d\n", lookup_symbol_addr($1));
+        }else if (!strcmp(lookup_symbol_type($1), "bool")){
+            CODEGEN("istore %d\n", lookup_symbol_addr($1));
+        }    
+    }
+    | ID ADD_ASSIGN LIT ';' {
+        if(!strcmp(lookup_symbol_type($1), "i32")){
+            CODEGEN("iload %d\n", lookup_symbol_addr($1));
+            CODEGEN("iadd\n");
+            CODEGEN("istore %d\n", lookup_symbol_addr($1));
+        }
+        else if (!strcmp(lookup_symbol_type($1), "f32")){
+            CODEGEN("fload %d\n", lookup_symbol_addr($1));
+            CODEGEN("fadd\n");
+            CODEGEN("fstore %d\n", lookup_symbol_addr($1));
+        }
+        printf("ADD_ASSIGN\n");}
+    | ID 
+    {
+        if(!strcmp(lookup_symbol_type($1), "i32")){
+            CODEGEN("iload %d\n", lookup_symbol_addr($1));
+        }
+        else if (!strcmp(lookup_symbol_type($1), "f32")){
+            CODEGEN("fload %d\n", lookup_symbol_addr($1));
+        }
+    }
+    SUB_ASSIGN LIT ';' 
+    {
+        if(!strcmp(lookup_symbol_type($1), "i32")){
+            CODEGEN("isub\n");
+            CODEGEN("istore %d\n", lookup_symbol_addr($1));
+        }
+        else if (!strcmp(lookup_symbol_type($1), "f32")){
+            CODEGEN("fsub\n");
+            CODEGEN("fstore %d\n", lookup_symbol_addr($1));
+        }
+    }
+        {printf("SUB_ASSIGN\n");}
+    | ID MUL_ASSIGN LIT ';' {printf("MUL_ASSIGN\n");
+        if(!strcmp(lookup_symbol_type($1), "i32")){
+            CODEGEN("iload %d\n", lookup_symbol_addr($1));
+            CODEGEN("imul\n");
+            CODEGEN("istore %d\n", lookup_symbol_addr($1));
+        }
+        else if (!strcmp(lookup_symbol_type($1), "f32")){
+            CODEGEN("fload %d\n", lookup_symbol_addr($1));
+            CODEGEN("fmul\n");
+            CODEGEN("fstore %d\n", lookup_symbol_addr($1));
+        }
+    }
+    | ID 
+    {
+        if(!strcmp(lookup_symbol_type($1), "i32")){
+            CODEGEN("iload %d\n", lookup_symbol_addr($1));
+        }
+        else if (!strcmp(lookup_symbol_type($1), "f32")){
+            CODEGEN("fload %d\n", lookup_symbol_addr($1));
+        }
+    }    
+    DIV_ASSIGN LIT ';' {printf("DIV_ASSIGN\n");}
+    {
+        if(!strcmp(lookup_symbol_type($1), "i32")){
+            CODEGEN("idiv\n");
+            CODEGEN("istore %d\n", lookup_symbol_addr($1));
+        }
+        else if (!strcmp(lookup_symbol_type($1), "f32")){
+            CODEGEN("fdiv\n");
+            CODEGEN("fstore %d\n", lookup_symbol_addr($1));
+        }
+    }
+    | ID 
+    {
+        if(!strcmp(lookup_symbol_type($1), "i32")){
+            CODEGEN("iload %d\n", lookup_symbol_addr($1));
+        }
+        else if (!strcmp(lookup_symbol_type($1), "f32")){
+            CODEGEN("fload %d\n", lookup_symbol_addr($1));
+        }
+    }  
+    REM_ASSIGN LIT ';' {printf("REM_ASSIGN\n");}
+    {
+        if(!strcmp(lookup_symbol_type($1), "i32")){
+            CODEGEN("irem\n");
+            CODEGEN("istore %d\n", lookup_symbol_addr($1));
+        }
+    }
     | ID '=' Expression ';' {
-        if(0 == strcmp(lookup_symbol_type($1), "undefined"))
-            printf("error:%d: undefined: %s\n", line_number, $1);
-        else{
-            printf("ASSIGN\n");
-            if(0 == lookup_symbol_mut($1))
-                printf("error:%d: cannot borrow immutable borrowed content `%s` as mutable\n", line_number, $1);
-        }}
+        // if(!strcmp(lookup_symbol_type($1), "i32")){
+        //     CODEGEN("istore %d\n", lookup_symbol_addr($1));
+        // }else if (!strcmp(lookup_symbol_type($1), "f32")){
+        //     CODEGEN("fstore %d\n", lookup_symbol_addr($1));
+        // }else if (!strcmp(lookup_symbol_type($1), "str")){
+        //     CODEGEN("astore %d\n", lookup_symbol_addr($1));
+        // }else if (!strcmp(lookup_symbol_type($1), "bool")){
+        //     CODEGEN("istore %d\n", lookup_symbol_addr($1));
+        // }
+    }
     | LET ID ':' ARRAY {insert_symbol($2, 0, "array", line_number, "-");}              // a08
 ;
 
@@ -458,7 +554,7 @@ LIT
     | FLOAT_LIT {$$ = "f32"; CODEGEN("ldc %f\n", $1);}
     | STRING_LIT {$$ = "str"; CODEGEN("ldc \"%s\"\n", $1);}
     | '"' STRING_LIT '"' {$$ = "str"; CODEGEN("ldc \"%s\"\n", $2);}
-    | '"' '"' {$$ = "str"; printf("STRING_LIT \"\"\n");}
+    | '"' '"' {$$ = "str"; printf("STRING_LIT \"\"\n"); CODEGEN("ldc \"\"\n");}
     | TRUE {$$ = "bool";printf("bool TRUE\n"); CODEGEN("iconst_1\n");}
     | FALSE {$$ = "bool";printf("bool FALSE\n"); CODEGEN("iconst_0\n");}
 ;
