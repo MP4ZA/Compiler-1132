@@ -79,6 +79,16 @@
     static int True_second = 1;
     static int False_second = 1;
     static int the_end = 1;
+
+    static int whilewhile = 1;
+    static int end_whilewhile = 1;
+
+    static int if_exit = 1;
+    static int condition_true = 1;
+
+    static int LSS_exit = 1;
+    static int LSS_true = 1;
+
 %}
 
 %error-verbose
@@ -172,16 +182,56 @@ Ifstmt
     | ELSE Block
 ;
 Ifcond
-    : ID EQL ID  {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} {printf("IDENT (name=%s, address=%d)\n", $3, lookup_symbol_addr($3));} {printf("EQL\n");}
-    | ID EQL {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} LIT  {printf("EQL\n");}
-    | LIT EQL LIT {printf("EQL\n");}
+    : ID EQL ID  
+    {
+        CODEGEN("if_icmpeq condition_true%d\n", condition_true);
+        CODEGEN("    iconst_0\n");
+        CODEGEN("    goto if_exit%d\n", if_exit);
+        CODEGEN("condition_true%d:\n", condition_true++);
+        CODEGEN("    iconst_1\n");
+        CODEGEN("if_exit%d\n", if_exit++);
+    } 
+    | ID EQL LIT 
+    {
+        CODEGEN("if_icmpeq condition_true%d\n", condition_true);
+        CODEGEN("    iconst_0\n");
+        CODEGEN("    goto if_exit%d\n", if_exit);
+        CODEGEN("condition_true%d:\n", condition_true++);
+        CODEGEN("    iconst_1\n");
+        CODEGEN("if_exit%d\n", if_exit++);
+    } 
     | ID  NEQ ID  {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} {printf("IDENT (name=%s, address=%d)\n", $3, lookup_symbol_addr($3));} {printf("NEQ\n");}
     | ID NEQ {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} LIT  {printf("NEQ\n");}
     | LIT NEQ LIT {printf("NEQ\n");}
-    | ID {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} '<' LIT {printf("LSS\n");}
+    | ID {
+        printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));
+        CODEGEN("iload %d\n", lookup_symbol_addr($1));
+    } 
+    '<' LIT {printf("LSS\n");}
+    {
+        CODEGEN("if_icmplt LSS_true%d\n", LSS_true);
+        CODEGEN("    iconst_0\n");
+        CODEGEN("    goto LSS_exit%d\n", LSS_exit);
+        CODEGEN("LSS_true%d:\n", LSS_true++);
+        CODEGEN("    iconst_1\n");
+        CODEGEN("LSS_exit%d:\n", LSS_exit++);
+    } 
 ;
 Whilestmt
-    : WHILE Ifcond Block
+    : WHILE 
+    {
+        CODEGEN("whilewhile%d:\n", whilewhile);   
+    }
+    Ifcond 
+    {
+        CODEGEN("ifeq end_whilewhile%d\n", end_whilewhile);
+    }
+    Block
+    {
+        CODEGEN("goto whilewhile%d\n", whilewhile);
+        CODEGEN("end_whilewhile%d:\n", end_whilewhile++);
+        whilewhile++;
+    }
 ;
 
 AssignStmt
@@ -208,7 +258,17 @@ AssignStmt
             CODEGEN("istore %d\n", addr);
         }
     }
-    | LET MUT ID '=' LIT ';' {insert_symbol($3, 1, $5, line_number, "-");}
+    | LET MUT ID '=' LIT ';' {insert_symbol($3, 1, $5, line_number, "-");
+        if(!strcmp($5, "i32")){
+            CODEGEN("istore %d\n", addr);
+        }else if (!strcmp($5, "f32")){
+            CODEGEN("fstore %d\n", addr);
+        }else if (!strcmp($5, "str")){
+            CODEGEN("astore %d\n", addr);
+        }else if (!strcmp($5, "bool")){
+            CODEGEN("istore %d\n", addr);
+        }
+    }
     | LET MUT ID ':' Type ';' {insert_symbol($3, 1, $5, line_number, "-");}             // a05
     | ID '=' LIT ';' {
         if(!strcmp(lookup_symbol_type($1), "i32")){
