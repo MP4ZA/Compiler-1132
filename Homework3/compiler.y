@@ -89,6 +89,10 @@
     static int LSS_exit = 1;
     static int LSS_true = 1;
 
+    static int elseelse = 1;
+    static int ifelseend = 1;
+    static int endif = 1;
+
 %}
 
 %error-verbose
@@ -178,12 +182,54 @@ Statement
 ;
 
 Ifstmt
-    : IF Ifcond Block
-    | ELSE Block
+    : IF 
+    Ifcond 
+    {
+        CODEGEN("ifeq endif%d\n", endif);
+    }
+    Block 
+    {
+         CODEGEN("goto endif%d\n", endif+1);
+         CODEGEN("endif%d:\n", endif++);
+    }
+    |  ELSE 
+    {
+    }
+    Block 
+    {
+        CODEGEN("endif%d:\n", endif);
+    }
+
+    // Block
+
+    // {printf("IFIFIFIFIF\n");}
+
+
+    // |
+    // IF Ifcond 
+    // {
+    //     CODEGEN("ifeq elseelse%d\n", elseelse);
+    // }
+    // Block
+    // {
+    //     CODEGEN("goto ifelseend%d\n", ifelseend);
+    // }
+    // ELSE 
+    // {
+    //     CODEGEN("elseelse%d:\n", elseelse++);
+    // }
+    // Block
+    // {
+    //     CODEGEN("ifelseend%d:\n", ifelseend++);
+    // }
+    // {printf("IFELSE\n");}
+    
 ;
 Ifcond
     : ID EQL ID  
     {
+        CODEGEN("iload %d\n", lookup_symbol_addr($1));
+        CODEGEN("iload %d\n", lookup_symbol_addr($3));
         CODEGEN("if_icmpeq condition_true%d\n", condition_true);
         CODEGEN("    iconst_0\n");
         CODEGEN("    goto if_exit%d\n", if_exit);
@@ -193,15 +239,28 @@ Ifcond
     } 
     | ID EQL LIT 
     {
+        CODEGEN("iload %d\n", lookup_symbol_addr($1));
         CODEGEN("if_icmpeq condition_true%d\n", condition_true);
         CODEGEN("    iconst_0\n");
         CODEGEN("    goto if_exit%d\n", if_exit);
         CODEGEN("condition_true%d:\n", condition_true++);
         CODEGEN("    iconst_1\n");
-        CODEGEN("if_exit%d\n", if_exit++);
+        CODEGEN("if_exit%d:\n", if_exit++);
     } 
     | ID  NEQ ID  {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} {printf("IDENT (name=%s, address=%d)\n", $3, lookup_symbol_addr($3));} {printf("NEQ\n");}
-    | ID NEQ {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} LIT  {printf("NEQ\n");}
+    | ID NEQ 
+    {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} 
+    LIT  
+    {
+        CODEGEN("iload %d\n", lookup_symbol_addr($1));
+        CODEGEN("if_icmpne condition_true%d\n", condition_true);
+        CODEGEN("    iconst_0\n");
+        CODEGEN("    goto if_exit%d\n", if_exit);
+        CODEGEN("condition_true%d:\n", condition_true++);
+        CODEGEN("    iconst_1\n");
+        CODEGEN("if_exit%d:\n", if_exit++);
+    }  
+    {printf("NEQ\n");}
     | LIT NEQ LIT {printf("NEQ\n");}
     | ID {
         printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));
