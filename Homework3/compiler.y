@@ -38,7 +38,6 @@
     static void insert_symbol();
     static char* lookup_symbol_type();
     static int lookup_symbol_addr();
-    static int lookup_symbol_mut();
     static void dump_symbol();
 
     /* Global variables */
@@ -173,24 +172,13 @@ Ifstmt
     | ELSE Block
 ;
 Ifcond
-    : ID  EQL ID  {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} {printf("IDENT (name=%s, address=%d)\n", $3, lookup_symbol_addr($3));} {printf("EQL\n");}
+    : ID EQL ID  {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} {printf("IDENT (name=%s, address=%d)\n", $3, lookup_symbol_addr($3));} {printf("EQL\n");}
     | ID EQL {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} LIT  {printf("EQL\n");}
     | LIT EQL LIT {printf("EQL\n");}
-    
     | ID  NEQ ID  {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} {printf("IDENT (name=%s, address=%d)\n", $3, lookup_symbol_addr($3));} {printf("NEQ\n");}
     | ID NEQ {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} LIT  {printf("NEQ\n");}
     | LIT NEQ LIT {printf("NEQ\n");}
-
     | ID {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} '<' LIT {printf("LSS\n");}
-    | ID {
-        if(0 == strcmp(lookup_symbol_type($1), "undefined"))
-            printf("error:%d: undefined: %s\n", line_number, $1);
-        else
-            printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} 
-    '>' LIT {
-        if(lookup_symbol_type($1) != $4)                                                                                                                // a09
-            printf("error:%d: invalid operation: GTR (mismatched types %s and %s)\n",line_number, lookup_symbol_type($1), $4);                       // a09
-        printf("GTR\n");}      // a09
 ;
 Whilestmt
     : WHILE Ifcond Block
@@ -315,24 +303,16 @@ AssignStmt
         }
     }
     | ID '=' Expression ';' {
-        // if(!strcmp(lookup_symbol_type($1), "i32")){
-        //     CODEGEN("istore %d\n", lookup_symbol_addr($1));
-        // }else if (!strcmp(lookup_symbol_type($1), "f32")){
-        //     CODEGEN("fstore %d\n", lookup_symbol_addr($1));
-        // }else if (!strcmp(lookup_symbol_type($1), "str")){
-        //     CODEGEN("astore %d\n", lookup_symbol_addr($1));
-        // }else if (!strcmp(lookup_symbol_type($1), "bool")){
-        //     CODEGEN("istore %d\n", lookup_symbol_addr($1));
-        // }
+        if(!strcmp(lookup_symbol_type($1), "i32")){
+            CODEGEN("istore %d\n", lookup_symbol_addr($1));
+        }else if (!strcmp(lookup_symbol_type($1), "f32")){
+            CODEGEN("fstore %d\n", lookup_symbol_addr($1));
+        }else if (!strcmp(lookup_symbol_type($1), "str")){
+            CODEGEN("astore %d\n", lookup_symbol_addr($1));
+        }else if (!strcmp(lookup_symbol_type($1), "bool")){
+            CODEGEN("istore %d\n", lookup_symbol_addr($1));
+        }
     }
-    | LET ID ':' ARRAY {insert_symbol($2, 0, "array", line_number, "-");}              // a08
-;
-
-ARRAY
-    : '[' Type ';' LIT ']' '=' '[' VALUE ']' ';' ;                                       // a08
-VALUE
-    : LIT ',' VALUE 
-    | LIT
 ;
 
 PrintStatement
@@ -534,11 +514,29 @@ NeverGonnaGiveYouUp
         printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); 
     }
     | LIT AS Type 
-        {if(!strcmp($1, "f32") && !strcmp($3, "i32")) CODEGEN("f2i\n");                                                   // a05
-        else if (!strcmp($1, "i32") && !strcmp($3, "f32")) CODEGEN("i2f\n");}                                             // a05
+        {
+            if(!strcmp($1, "f32") && !strcmp($3, "i32")){
+                $$ = "i32";
+                CODEGEN("f2i\n");                                                   // a05
+            }
+            else if (!strcmp($1, "i32") && !strcmp($3, "f32")){
+                $$ = "f32";
+                CODEGEN("i2f\n");
+            } 
+        }                                             // a05
     | ID AS Type {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} 
-        {if(!strcmp(lookup_symbol_type($1), "f32") && !strcmp($3, "i32")) CODEGEN("f2i\n");                               // a05
-        else if (!strcmp(lookup_symbol_type($1), "i32") && !strcmp($3, "f32")) CODEGEN("i2f\n");}                         // a05
+        {
+            if(!strcmp(lookup_symbol_type($1), "f32") && !strcmp($3, "i32")) {
+                $$ = "i32";
+                CODEGEN("fload %d\n",lookup_symbol_addr($1));
+                CODEGEN("f2i\n");  
+            } // a05
+            else if (!strcmp(lookup_symbol_type($1), "i32") && !strcmp($3, "f32")) {
+                $$ = "f32";
+                CODEGEN("iload %d\n",lookup_symbol_addr($1));
+                CODEGEN("i2f\n");
+            }
+        }                         // a05
 ;
 
 Type 
@@ -632,7 +630,6 @@ static char* lookup_symbol_type(char* ID_name) {
     }
     return SameType;
 }
-
 static int lookup_symbol_addr(char* ID_name) {
     int addregera = -2147483648;
     for(int i=scope_level; i>=0;i--){
@@ -644,19 +641,6 @@ static int lookup_symbol_addr(char* ID_name) {
         }
     }
     return addregera;
-}
-
-static int lookup_symbol_mut(char* ID_name) {
-    int mutable = 0;
-    for(int i=scope_level; i>=0;i--){
-        for(int j =0; j<symbol_count[i]; j++){
-            if(0 ==  strcmp(ID_name,symbol_table[i][j].name)){
-                mutable = symbol_table[i][j].mut;
-                return mutable;
-            }
-        }
-    }
-    return mutable;
 }
 static void dump_symbol() {
     int level = scope_level;
