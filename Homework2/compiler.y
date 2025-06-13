@@ -49,8 +49,6 @@
     static int scope_level = -1;
     static int addr = -2;
     static int line_number = 1;
-    // static int array[128] = {0};
-    // static int length;
 %};
 
 %error-verbose
@@ -70,7 +68,6 @@
 /* Token without return */
 %token LET MUT NEWLINE
 %token INT FLOAT BOOL STR
-/* %token TRUE FALSE */
 %token GEQ LEQ EQL NEQ LOR LAND
 %token ADD_ASSIGN SUB_ASSIGN MUL_ASSIGN DIV_ASSIGN REM_ASSIGN
 %token IF ELSE FOR WHILE LOOP
@@ -86,14 +83,13 @@
 %token <b_val> TRUE
 %token <b_val> FALSE
 %token <s_val> ID
-/* %token <s_val> ID */
 
 /* Nonterminal with return, which need to sepcify type */
 %type <s_val> Type
 %type <s_val> LIT
-%type <s_val> PrintContent
-%type <s_val> Expression LogicalOrExpr LogicalAndExpr EqualityExpr SHIFTING AddExpr MulExpr UnaryExpr NeverGonnaGiveYouUp
-
+%type <s_val> PrintContentList PrintContent
+%type <s_val> Expression LogicalOrExpr LogicalAndExpr EqualityExpr SHIFTING AddExpr MulExpr UnaryExpr Atom
+%type <s_val> Operand
 /* Yacc will start at this nonterminal */
 %start Program
 
@@ -101,62 +97,48 @@
 %%
 
 Program
-    : {create_symbol();} GlobalStatementList {dump_symbol();} 
-;
+    : GlobalStatementList ;
 GlobalStatementList 
     : GlobalStatementList GlobalStatement
-    | GlobalStatement 
-    | NEWLINE {++line_number;}
-;
+    | GlobalStatement ;
 GlobalStatement
     : FunctionDeclStmt
-    | NEWLINE {++line_number;}
-;
-
-
+    | NEWLINE {++line_number;} ;    // 函式外的空白行
 FunctionDeclStmt
-    : FUNC ID {printf("func: %s\n", $2);} '(' ')' {insert_symbol($2, -1, "func",  line_number, "(V)V");} 
-     Block ;
+    : FUNC 
+      ID {printf("func: %s\n", $2);} 
+      '(' ')' 
+      {insert_symbol($2, -1, "func",  line_number, "(V)V");} 
+      Block ;
 Block
-    : {create_symbol();} '{' StatementList '}' {dump_symbol();};
+    : {create_symbol();}
+      '{' StatementList '}'
+      {dump_symbol();} ;
 StatementList
     : StatementList Statement 
-    | /* empty */  ;
+    | /* empty */ ;
 Statement
     : AssignStmt
     | PrintStatement
-    | NEWLINE {++line_number;}
     | Block
     | Ifstmt
     | Whilestmt
+    | NEWLINE {++line_number;}
 ;
 
 Ifstmt
-    : IF Ifcond Block
-    | ELSE Block
-;
-Ifcond
-    : ID  EQL ID  {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} {printf("IDENT (name=%s, address=%d)\n", $3, lookup_symbol_addr($3));} {printf("EQL\n");}
-    | ID EQL {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} LIT  {printf("EQL\n");}
-    | LIT EQL LIT {printf("EQL\n");}
-    
-    | ID  NEQ ID  {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} {printf("IDENT (name=%s, address=%d)\n", $3, lookup_symbol_addr($3));} {printf("NEQ\n");}
-    | ID NEQ {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} LIT  {printf("NEQ\n");}
-    | LIT NEQ LIT {printf("NEQ\n");}
-
-    | ID {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} '<' LIT {printf("LSS\n");}
-    | ID {
-        if(0 == strcmp(lookup_symbol_type($1), "undefined"))
-            printf("error:%d: undefined: %s\n", line_number, $1);
-        else
-            printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} 
-    '>' LIT {
-        if(lookup_symbol_type($1) != $4)                                                                                                                // a09
-            printf("error:%d: invalid operation: GTR (mismatched types %s and %s)\n",line_number, lookup_symbol_type($1), $4);                       // a09
-        printf("GTR\n");}      // a09
-;
+    : IF Condition Block
+    | ELSE Block ;
 Whilestmt
-    : WHILE Ifcond Block
+    : WHILE Condition Block ;
+Condition
+    : Expression
+    | Operand '>' Operand 
+    {
+        if(lookup_symbol_type($1) != $3)                                                                                                                // a09
+            printf("error:%d: invalid operation: GTR (mismatched types %s and %s)\n",line_number, lookup_symbol_type($1), $3);                       // a09
+    }
+    {printf("GTR\n");}      // a09
 ;
 
 AssignStmt
@@ -164,14 +146,6 @@ AssignStmt
     | LET MUT ID ':' Type '=' LIT ';' {insert_symbol($3, 1, $7, line_number, "-");}
     | LET MUT ID '=' LIT ';' {insert_symbol($3, 1, $5, line_number, "-");}
     | LET MUT ID ':' Type ';' {insert_symbol($3, 1, $5, line_number, "-");}             // a05
-    | ID '=' LIT ';' {
-        if(0 == strcmp(lookup_symbol_type($1), "undefined"))
-            printf("error:%d: undefined: %s\n", line_number, $1);
-        else{
-            printf("ASSIGN\n");
-            if(0 == lookup_symbol_mut($1))
-                printf("error:%d: cannot borrow immutable borrowed content `%s` as mutable\n", line_number, $1);
-        }}
     | ID ADD_ASSIGN LIT ';' {printf("ADD_ASSIGN\n");}
     | ID SUB_ASSIGN LIT ';' {printf("SUB_ASSIGN\n");}
     | ID MUL_ASSIGN LIT ';' {printf("MUL_ASSIGN\n");}
@@ -189,23 +163,22 @@ AssignStmt
 ;
 
 ARRAY
-    : '[' Type ';' LIT ']' '=' '[' VALUE ']' ';' ;                                       // a08
-VALUE
-    : LIT ',' VALUE 
+    : '[' Type ';' INT_LIT {printf("INT_LIT %d\n", $4);} ']' '=' '[' elem ']' ';' ;                                       // a08
+elem
+    : LIT ',' elem 
     | LIT
 ;
 
 PrintStatement
-    : PRINTLN '(' PrintContent ')' ';' {printf("PRINTLN %s\n", $3); }
-    | PRINT '(' PrintContent ')' ';' {printf("PRINT %s\n", $3); };
+    : PRINTLN '(' PrintContentList ')' ';' {printf("PRINTLN %s\n", $3); }
+    | PRINT '(' PrintContentList ')' ';' {printf("PRINT %s\n", $3); };
+PrintContentList
+    : PrintContentList PrintContent {$$ = !strcmp($2,"bruh")?$1:$2;}
+    | /* empty */ {$$ = "bruh";}
+;
 PrintContent
-    : LIT {$$ = $1;} 
-    /* | ID {$$ = lookup_symbol_type($1); printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); } */
-    | Expression {$$ = $1;}
-    | NEWLINE Expression{$$ = $2; ++line_number;}
-    | NEWLINE Expression NEWLINE{$$ = $2; ++line_number; ++line_number;}
-    | Expression NEWLINE{$$ = $1; ++line_number;}
-    | NEWLINE {++line_number;}
+    : Expression {$$ = $1;}
+    | NEWLINE {$$ = "bruh"; ++line_number;}
     | ID '[' INT_LIT ']' {$$ = "array"; printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));  printf("INT_LIT %d\n", $3);}
 ;
 
@@ -218,7 +191,17 @@ LogicalAndExpr
     : LogicalAndExpr LAND EqualityExpr {$$ = "bool"; printf("LAND\n");}
     | EqualityExpr {$$ = $1;} ;
 EqualityExpr
-    : EqualityExpr '>' SHIFTING {$$ = "bool"; printf("GTR\n");}
+    : EqualityExpr '>' SHIFTING 
+    {
+        $$ = "bool"; 
+        // printf("%s %s\n",lookup_symbol_type($1), lookup_symbol_type($3));
+        // if(lookup_symbol_type($1) != lookup_symbol_type($3))                                                                                                                // a09
+        //     printf("error:%d: invalid operation: GTR (mismatched types %s and %s)\n",line_number, lookup_symbol_type($1), lookup_symbol_type($3));                       // a09
+        printf("GTR\n"); 
+    }
+    | EqualityExpr '<' SHIFTING {$$ = "bool"; printf("LSS\n");}
+    | EqualityExpr EQL SHIFTING {$$ = "bool"; printf("EQL\n");}
+    | EqualityExpr NEQ SHIFTING {$$ = "bool"; printf("EQL\n");}
     | SHIFTING {$$ = $1;} ;
 SHIFTING
     : SHIFTING LSHIFT AddExpr {$$ = "i32"; 
@@ -239,44 +222,14 @@ MulExpr
 UnaryExpr
     : '-' UnaryExpr {$$ = $2; printf("NEG\n");}
     | '!' UnaryExpr {$$ = "bool"; printf("NOT\n");}
-    | NeverGonnaGiveYouUp {$$ = $1;} ;
-NeverGonnaGiveYouUp
+    | Atom {$$ = $1;} ;
+Atom
     : '(' Expression ')' {$$ = $2;} ;
-    | LIT {$$ = $1;}
-    | ID {$$ = lookup_symbol_type($1); printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); }
-    | LIT AS Type 
+    | Operand
+    | Operand AS Type 
         {if(!strcmp($1, "f32") && !strcmp($3, "i32")) printf("f2i\n");                                                   // a05
         else if (!strcmp($1, "i32") && !strcmp($3, "f32")) printf("i2f\n");}                                             // a05
-    | ID AS Type {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} 
-        {if(!strcmp(lookup_symbol_type($1), "f32") && !strcmp($3, "i32")) printf("f2i\n");                               // a05
-        else if (!strcmp(lookup_symbol_type($1), "i32") && !strcmp($3, "f32")) printf("i2f\n");}                         // a05
 ;
-
-/* Arithmetic
-    : Arithmetic '+' Arithmetic {printf("ADD\n");}
-    | Arithmetic '-' Arithmetic {printf("SUB\n");}
-    | Arithmetic '*' Arithmetic {printf("MUL\n");}
-    | Arithmetic '/' Arithmetic {printf("DIV\n");}
-    | Arithmetic '%' Arithmetic {printf("REM\n");}
-    | Arithmetic '>' Arithmetic {printf("GTR\n");}
-    | Arithmetic LOR Arithmetic {printf("LOR\n");}
-    | Arithmetic LAND Arithmetic {printf("LAND\n");}
-    | '!' Arithmetic {printf("NOT\n");}
-    | '-' Arithmetic {printf("NEG\n");}
-    | ID
-    | LIT
-    | '(' Arithmetic ')' 
-    | Arithmetic '+' '(' Arithmetic ')' 
-    | Arithmetic '-' '(' Arithmetic ')'
-    | Arithmetic '*' '(' Arithmetic ')'
-    | Arithmetic '/' '(' Arithmetic ')'
-    | Arithmetic '%' '(' Arithmetic ')'
-    | '(' Arithmetic ')'  '+' Arithmetic
-    | '(' Arithmetic ')'  '-' Arithmetic
-    | '(' Arithmetic ')'  '*' Arithmetic
-    | '(' Arithmetic ')'  '/' Arithmetic
-    | '(' Arithmetic ')'  '%' Arithmetic 
-; */
 
 Type 
    : INT {$$ = "i32";}
@@ -286,18 +239,29 @@ Type
    | '&' Type {$$ = $2;}
 ;
 
+Operand
+    : LIT
+    | ID 
+    {
+        if(0 == strcmp(lookup_symbol_type($1), "undefined")){
+            printf("error:%d: undefined: %s\n", line_number, $1);
+            $$ = "undefined";
+        }else{
+            $$ = lookup_symbol_type($1);
+            printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));
+        }
+    };
 LIT
-    : INT_LIT {$$ = "i32"; printf("INT_LIT %d\n", $1);}
-    | FLOAT_LIT {$$ = "f32"; printf("FLOAT_LIT %f\n", $1);}
-    | STRING_LIT {$$ = "str"; printf("STRING_LIT %s\n", $1);}
-    | '"' STRING_LIT '"' {$$ = "str"; printf("STRING_LIT \"%s\"\n", $2);}
-    | '"' '"' {$$ = "str"; printf("STRING_LIT \"\"\n");}
-    | TRUE {$$ = "bool";printf("bool TRUE\n");}
-    | FALSE {$$ = "bool";printf("bool FALSE\n");}
+    : INT_LIT               {$$ = "i32";    printf("INT_LIT %d\n", $1);}
+    | FLOAT_LIT             {$$ = "f32";    printf("FLOAT_LIT %f\n", $1);}
+    | STRING_LIT            {$$ = "str";    printf("STRING_LIT %s\n", $1);}
+    | '"' STRING_LIT '"'    {$$ = "str";    printf("STRING_LIT \"%s\"\n", $2);}
+    | '"' '"'               {$$ = "str";    printf("STRING_LIT \"\"\n");}
+    | TRUE                  {$$ = "bool";   printf("bool TRUE\n");}
+    | FALSE                 {$$ = "bool";   printf("bool FALSE\n");}
 ;
 
 %%
-
 
 /* C code section */
 int main(int argc, char *argv[])
@@ -308,8 +272,12 @@ int main(int argc, char *argv[])
         yyin = stdin;
     }
 
+    create_symbol();
+ 
     yylineno = 0;
     yyparse();
+
+    dump_symbol();
 
 	printf("Total lines: %d\n", yylineno);
     fclose(yyin);
@@ -374,21 +342,7 @@ static int lookup_symbol_mut(char* ID_name) {
     return mutable;
 }
 
-/* static void write(int i, int val){
-    array[i] = val;
-}
-static int read(int i){
-    return array[i];
-} */
-
 static void dump_symbol() {
-    /* printf("\n> Dump symbol table (scope level: %d)\n", 0);
-    printf("%-10s%-10s%-10s%-10s%-10s%-10s%-10s\n",
-        "Index", "Name", "Mut","Type", "Addr", "Lineno", "Func_sig");
-    printf("%-10d%-10s%-10d%-10s%-10d%-10d%-10s\n",
-            0, "name", 0, "type", 0, 0, "func_sig"); */
-
-
     int level = scope_level;
     printf("\n> Dump symbol table (scope level: %d)\n", level);
     printf("%-10s%-10s%-10s%-10s%-10s%-10s%-10s\n",
@@ -400,29 +354,4 @@ static void dump_symbol() {
     }
     symbol_count[level] = 0;
     scope_level--;
-
-
-
-    /* for (int level = scope_level; level >= 0; level--) {
-        printf("\n> Dump symbol table (scope level: %d)\n", level);
-        printf("%-10s%-10s%-10s%-10s%-10s%-10s%-10s\n",
-            "Index", "Name", "Mut", "Type", "Addr", "Lineno", "Func_sig");
-        for (int i = 0; i < symbol_count[level]; i++) {
-            Symbol s = symbol_table[level][i];
-            printf("%-10d%-10s%-10d%-10s%-10d%-10d%-10s\n",
-                s.index, s.name, s.mut, s.type, s.addr, s.lineno, s.func_sig);
-        }
-    } */
-
-    /* 
-    // free(): double free detected in tcache 2
-    // Aborted (core dumped)
-    for(int i=0;i<4;i++){
-        for(int j=0;j<symbol_count[i];j++){
-            free(symbol_table[i][j].name);
-            free(symbol_table[i][j].type);
-            free(symbol_table[i][j].func_sig);
-        }
-    } 
-    */
 }
