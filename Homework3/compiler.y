@@ -89,8 +89,6 @@
     static int LSS_exit = 1;
     static int LSS_true = 1;
 
-    static int elseelse = 1;
-    static int ifelseend = 1;
     static int endif = 1;
 
 %}
@@ -143,35 +141,32 @@
 %%
 
 Program
-    : { 
-      CODEGEN("\n.method public static main([Ljava/lang/String;)V\n");
-      CODEGEN(".limit stack 100\n");
-      CODEGEN(".limit locals 100\n");
-    } 
-    {create_symbol(); printf("ininin\n");} GlobalStatementList {dump_symbol();} 
-    {
-      CODEGEN("return\n");
-      CODEGEN(".end method\n");
-    }
+    : {CODEGEN("\n.method public static main([Ljava/lang/String;)V\n");
+       CODEGEN(".limit stack 100\n");
+       CODEGEN(".limit locals 100\n");} 
+       {create_symbol();} GlobalStatementList {dump_symbol();} 
+    { CODEGEN("return\n");
+      CODEGEN(".end method\n"); } 
 ;
 GlobalStatementList 
     : GlobalStatementList GlobalStatement
     | GlobalStatement 
-    | NEWLINE {++line_number;}
+    | NEWLINE {++line_number;} 
 ;
 GlobalStatement
     : FunctionDeclStmt
-    | NEWLINE {++line_number;}
+    | NEWLINE {++line_number;} 
 ;
-
 FunctionDeclStmt
-    : FUNC ID {printf("func: %s\n", $2);} '(' ')' {insert_symbol($2, -1, "func",  line_number, "(V)V");} 
+    : FUNC ID '(' ')' {insert_symbol($2, -1, "func",  line_number, "(V)V");}
      Block ;
 Block
-    : {create_symbol();} '{' StatementList '}' {dump_symbol();};
+    : {create_symbol();} '{' StatementList '}' {dump_symbol();}
+;
 StatementList
     : StatementList Statement 
-    | /* empty */  ;
+    | /* empty */  
+;
 Statement
     : AssignStmt
     | PrintStatement
@@ -184,46 +179,13 @@ Statement
 Ifstmt
     : IF 
     Ifcond 
-    {
-        CODEGEN("ifeq endif%d\n", endif);
-    }
+    {CODEGEN("ifeq endif%d\n", endif);}
     Block 
-    {
-         CODEGEN("goto endif%d\n", endif+1);
-         CODEGEN("endif%d:\n", endif++);
-    }
-    |  ELSE 
-    {
-    }
+    { CODEGEN("goto endif%d\n", endif+1);
+      CODEGEN("endif%d:\n", endif++); }
+    | ELSE 
     Block 
-    {
-        CODEGEN("endif%d:\n", endif);
-    }
-
-    // Block
-
-    // {printf("IFIFIFIFIF\n");}
-
-
-    // |
-    // IF Ifcond 
-    // {
-    //     CODEGEN("ifeq elseelse%d\n", elseelse);
-    // }
-    // Block
-    // {
-    //     CODEGEN("goto ifelseend%d\n", ifelseend);
-    // }
-    // ELSE 
-    // {
-    //     CODEGEN("elseelse%d:\n", elseelse++);
-    // }
-    // Block
-    // {
-    //     CODEGEN("ifelseend%d:\n", ifelseend++);
-    // }
-    // {printf("IFELSE\n");}
-    
+    { CODEGEN("endif%d:\n", endif); }
 ;
 Ifcond
     : ID EQL ID  
@@ -247,26 +209,20 @@ Ifcond
         CODEGEN("    iconst_1\n");
         CODEGEN("if_exit%d:\n", if_exit++);
     } 
-    | ID  NEQ ID  {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} {printf("IDENT (name=%s, address=%d)\n", $3, lookup_symbol_addr($3));} {printf("NEQ\n");}
-    | ID NEQ 
-    {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} 
-    LIT  
-    {
+    | ID NEQ ID
+    | ID NEQ LIT {
         CODEGEN("iload %d\n", lookup_symbol_addr($1));
         CODEGEN("if_icmpne condition_true%d\n", condition_true);
         CODEGEN("    iconst_0\n");
         CODEGEN("    goto if_exit%d\n", if_exit);
         CODEGEN("condition_true%d:\n", condition_true++);
         CODEGEN("    iconst_1\n");
-        CODEGEN("if_exit%d:\n", if_exit++);
-    }  
-    {printf("NEQ\n");}
-    | LIT NEQ LIT {printf("NEQ\n");}
+        CODEGEN("if_exit%d:\n", if_exit++); }  
+    | LIT NEQ LIT
     | ID {
-        printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));
         CODEGEN("iload %d\n", lookup_symbol_addr($1));
     } 
-    '<' LIT {printf("LSS\n");}
+    '<' LIT
     {
         CODEGEN("if_icmplt LSS_true%d\n", LSS_true);
         CODEGEN("    iconst_0\n");
@@ -274,7 +230,7 @@ Ifcond
         CODEGEN("LSS_true%d:\n", LSS_true++);
         CODEGEN("    iconst_1\n");
         CODEGEN("LSS_exit%d:\n", LSS_exit++);
-    } 
+    }
 ;
 Whilestmt
     : WHILE 
@@ -328,7 +284,7 @@ AssignStmt
             CODEGEN("istore %d\n", addr);
         }
     }
-    | LET MUT ID ':' Type ';' {insert_symbol($3, 1, $5, line_number, "-");}             // a05
+    | LET MUT ID ':' Type ';' {insert_symbol($3, 1, $5, line_number, "-");}
     | ID '=' LIT ';' {
         if(!strcmp(lookup_symbol_type($1), "i32")){
             CODEGEN("istore %d\n", lookup_symbol_addr($1));
@@ -351,7 +307,7 @@ AssignStmt
             CODEGEN("fadd\n");
             CODEGEN("fstore %d\n", lookup_symbol_addr($1));
         }
-        printf("ADD_ASSIGN\n");}
+    }
     | ID 
     {
         if(!strcmp(lookup_symbol_type($1), "i32")){
@@ -372,8 +328,7 @@ AssignStmt
             CODEGEN("fstore %d\n", lookup_symbol_addr($1));
         }
     }
-        {printf("SUB_ASSIGN\n");}
-    | ID MUL_ASSIGN LIT ';' {printf("MUL_ASSIGN\n");
+    | ID MUL_ASSIGN LIT ';' {
         if(!strcmp(lookup_symbol_type($1), "i32")){
             CODEGEN("iload %d\n", lookup_symbol_addr($1));
             CODEGEN("imul\n");
@@ -394,7 +349,7 @@ AssignStmt
             CODEGEN("fload %d\n", lookup_symbol_addr($1));
         }
     }    
-    DIV_ASSIGN LIT ';' {printf("DIV_ASSIGN\n");}
+    DIV_ASSIGN LIT ';' 
     {
         if(!strcmp(lookup_symbol_type($1), "i32")){
             CODEGEN("idiv\n");
@@ -414,7 +369,7 @@ AssignStmt
             CODEGEN("fload %d\n", lookup_symbol_addr($1));
         }
     }  
-    REM_ASSIGN LIT ';' {printf("REM_ASSIGN\n");}
+    REM_ASSIGN LIT ';' 
     {
         if(!strcmp(lookup_symbol_type($1), "i32")){
             CODEGEN("irem\n");
@@ -448,7 +403,7 @@ PrintStatement
         }else if(!strcmp($4, "bool")){
             int cur = toOne++;
             int end = notend++;
-            CODEGEN("ifeq print_false_%d\n", cur);       // 如果為 0，跳去印 false
+            CODEGEN("ifeq print_false_%d\n", cur);
             CODEGEN("ldc \"true\"\n");
             CODEGEN("goto print_end_%d\n", end);
             CODEGEN("print_false_%d:\n", cur);
@@ -470,7 +425,7 @@ PrintStatement
         }else if(!strcmp($4, "bool")){
             int cur = toOne++;
             int end = notend++;
-            CODEGEN("ifeq print_false_%d\n", cur);       // 如果為 0，跳去印 false
+            CODEGEN("ifeq print_false_%d\n", cur);
             CODEGEN("ldc \"true\"\n");
             CODEGEN("goto print_end_%d\n", end);
             CODEGEN("print_false_%d:\n", cur);
@@ -486,7 +441,7 @@ PrintContent
     | NEWLINE Expression NEWLINE{$$ = $2; ++line_number; ++line_number;}
     | Expression NEWLINE{$$ = $1; ++line_number;}
     | NEWLINE {++line_number;}
-    | ID '[' INT_LIT ']' {$$ = "array"; printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));  printf("INT_LIT %d\n", $3);}
+    | ID '[' INT_LIT ']' {$$ = "array";}
 ;
 
 Expression
@@ -494,8 +449,6 @@ Expression
 LogicalOrExpr
     : LogicalOrExpr LOR LogicalAndExpr {
         $$ = "bool"; 
-        printf("LOR\n");
-
         CODEGEN("ifne True_first%d\n", True_first);
         CODEGEN("ifne True_second%d\n", True_second);
         CODEGEN("goto False_second%d\n", False_second);
@@ -512,7 +465,6 @@ LogicalOrExpr
 LogicalAndExpr
     : LogicalAndExpr LAND EqualityExpr {
         $$ = "bool"; 
-        printf("LAND\n");
         CODEGEN("    ifne L_right%d\n", L_right);
         CODEGEN("    pop\n");
         CODEGEN("    goto L_if_false%d\n", L_if_false);
@@ -537,14 +489,7 @@ EqualityExpr
             CODEGEN("    goto L_exit%d\n",L_exit);
             CODEGEN("L_false%d:\n",L_false++);
             CODEGEN("    iconst_0\n");
-            CODEGEN("L_exit%d:\n", L_exit++);
-            // CODEGEN("if_icmpgt L_True%d\n", L_True);
-            // CODEGEN("L_false%d:\n", L_false++);
-            // CODEGEN("   iconst_0\n");
-            // CODEGEN("   goto L_if_exit%d\n", L_if_exit);
-            // CODEGEN("L_True%d:\n", L_True++);
-            // CODEGEN("   iconst_1\n");
-            // CODEGEN("L_if_exit%d:\n", L_if_exit++);     
+            CODEGEN("L_exit%d:\n", L_exit++); 
         }else{
             CODEGEN("if_icmpgt L_True%d\n", L_True);
             CODEGEN("L_false%d:\n", L_false++);
@@ -558,8 +503,8 @@ EqualityExpr
     | SHIFTING {$$ = $1;} ;
 SHIFTING
     : SHIFTING LSHIFT AddExpr {$$ = "i32"; 
-        if($1 != $3)                                                                                                                // a09
-            printf("error:%d: invalid operation: LSHIFT (mismatched types %s and %s)\n",line_number, $1, $3);                       // a09
+        if($1 != $3)   
+            printf("error:%d: invalid operation: LSHIFT (mismatched types %s and %s)\n",line_number, $1, $3);
         printf("LSHIFT\n");}
     | SHIFTING RSHIFT AddExpr {$$ = "i32"; printf("RSHIFT\n");}
     | AddExpr {$$ = $1;} ;
@@ -603,7 +548,6 @@ UnaryExpr
     }
     | '!' UnaryExpr {
         $$ = "bool"; 
-        printf("NOT\n");
         CODEGEN("ifeq toOne_%d\n", toOne);
         CODEGEN("    iconst_0\n");
         CODEGEN("    goto notend_%d\n", notend);
@@ -619,8 +563,6 @@ NeverGonnaGiveYouUp
     | LIT {$$ = $1;}
     | ID {
         $$ = lookup_symbol_type($1); 
-        // CODEGEN("istore %d\n", lookup_symbol_addr($1));
-        // CODEGEN("iload %d\n", lookup_symbol_addr($1));
         if(!strcmp(lookup_symbol_type($1), "i32")){
             CODEGEN("iload %d\n", lookup_symbol_addr($1));
         }else if(!strcmp(lookup_symbol_type($1), "f32")){
@@ -630,32 +572,31 @@ NeverGonnaGiveYouUp
         }else if(!strcmp(lookup_symbol_type($1), "bool")){
             CODEGEN("iload %d\n", lookup_symbol_addr($1));
         }
-        printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1)); 
     }
     | LIT AS Type 
         {
             if(!strcmp($1, "f32") && !strcmp($3, "i32")){
                 $$ = "i32";
-                CODEGEN("f2i\n");                                                   // a05
+                CODEGEN("f2i\n");
             }
             else if (!strcmp($1, "i32") && !strcmp($3, "f32")){
                 $$ = "f32";
                 CODEGEN("i2f\n");
             } 
-        }                                             // a05
-    | ID AS Type {printf("IDENT (name=%s, address=%d)\n", $1, lookup_symbol_addr($1));} 
+        }
+    | ID AS Type
         {
             if(!strcmp(lookup_symbol_type($1), "f32") && !strcmp($3, "i32")) {
                 $$ = "i32";
                 CODEGEN("fload %d\n",lookup_symbol_addr($1));
                 CODEGEN("f2i\n");  
-            } // a05
+            }
             else if (!strcmp(lookup_symbol_type($1), "i32") && !strcmp($3, "f32")) {
                 $$ = "f32";
                 CODEGEN("iload %d\n",lookup_symbol_addr($1));
                 CODEGEN("i2f\n");
             }
-        }                         // a05
+        }
 ;
 
 Type 
@@ -671,9 +612,9 @@ LIT
     | FLOAT_LIT {$$ = "f32"; CODEGEN("ldc %f\n", $1);}
     | STRING_LIT {$$ = "str"; CODEGEN("ldc \"%s\"\n", $1);}
     | '"' STRING_LIT '"' {$$ = "str"; CODEGEN("ldc \"%s\"\n", $2);}
-    | '"' '"' {$$ = "str"; printf("STRING_LIT \"\"\n"); CODEGEN("ldc \"\"\n");}
-    | TRUE {$$ = "bool";printf("bool TRUE\n"); CODEGEN("iconst_1\n");}
-    | FALSE {$$ = "bool";printf("bool FALSE\n"); CODEGEN("iconst_0\n");}
+    | '"' '"' {$$ = "str";  CODEGEN("ldc \"\"\n");}
+    | TRUE {$$ = "bool"; CODEGEN("iconst_1\n");}
+    | FALSE {$$ = "bool"; CODEGEN("iconst_0\n");}
 ;
 %%
 
@@ -717,10 +658,8 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-
 static void create_symbol() {
     printf("> Create symbol table (scope level %d)\n", ++scope_level);
-
 }
 
 static void insert_symbol(char* name, int mut, char *type, int lineno, char *func_sig) {
@@ -733,8 +672,6 @@ static void insert_symbol(char* name, int mut, char *type, int lineno, char *fun
     symbol_table[scope_level][index].lineno = lineno;
     symbol_table[scope_level][index].func_sig = strdup(func_sig);
     symbol_count[scope_level]++;
-
-    printf("> Insert `%s` (addr: %d) to scope level %d\n", name, addr, scope_level);
 }
 
 static char* lookup_symbol_type(char* ID_name) {
@@ -763,14 +700,6 @@ static int lookup_symbol_addr(char* ID_name) {
 }
 static void dump_symbol() {
     int level = scope_level;
-    printf("\n> Dump symbol table (scope level: %d)\n", level);
-    printf("%-10s%-10s%-10s%-10s%-10s%-10s%-10s\n",
-        "Index", "Name", "Mut", "Type", "Addr", "Lineno", "Func_sig");
-    for (int i = 0; i < symbol_count[level]; i++) {
-        Symbol s = symbol_table[level][i];
-        printf("%-10d%-10s%-10d%-10s%-10d%-10d%-10s\n",
-            s.index, s.name, s.mut, s.type, s.addr, s.lineno, s.func_sig);
-    }
     symbol_count[level] = 0;
     scope_level--;
 }
