@@ -28,12 +28,12 @@
     static int lookup_symbol_addr();
     static int lookup_symbol_mut();
     static void dump_symbol();
-    // static void write();
-    // static int read();
 
     /* Global variables */
     bool HAS_ERROR = false;
 
+    #define scope 4
+    #define entry 10
     typedef struct sym{
         int index;
         char *name;
@@ -44,8 +44,8 @@
         char *func_sig;
     } Symbol;
 
-    static Symbol symbol_table[4][10];  // [scope][Index]
-    static int symbol_count[4] = {0};
+    static Symbol symbol_table[scope][entry];
+    static int symbol_count[scope] = {0};
     static int scope_level = -1;
     static int addr = -2;
     static int line_number = 1;
@@ -88,7 +88,7 @@
 %type <s_val> Type
 %type <s_val> LIT
 %type <s_val> PrintContentList PrintContent
-%type <s_val> Expression LogicalOrExpr LogicalAndExpr EqualityExpr SHIFTING AddExpr MulExpr UnaryExpr Atom
+%type <s_val> Expression LogicalOrExpr LogicalAndExpr EqualityExpr SHIFTING AddExpr MulExpr UnaryExpr PrimaryExpr
 %type <s_val> Operand
 /* Yacc will start at this nonterminal */
 %start Program
@@ -107,8 +107,7 @@ GlobalStatement
 FunctionDeclStmt
     : FUNC 
       ID {printf("func: %s\n", $2);} 
-      '(' ')' 
-      {insert_symbol($2, -1, "func",  line_number, "(V)V");} 
+      '(' ')' {insert_symbol($2, -1, "func",  line_number, "(V)V");} 
       Block ;
 Block
     : {create_symbol();}
@@ -133,19 +132,13 @@ Whilestmt
     : WHILE Condition Block ;
 Condition
     : Expression
-    | Operand '>' Operand 
-    {
-        if(lookup_symbol_type($1) != $3)                                                                                                                // a09
-            printf("error:%d: invalid operation: GTR (mismatched types %s and %s)\n",line_number, lookup_symbol_type($1), $3);                       // a09
-    }
-    {printf("GTR\n");}      // a09
 ;
 
 AssignStmt
     : LET ID ':' Type '=' LIT ';' {insert_symbol($2, 0, $6, line_number, "-");}
     | LET MUT ID ':' Type '=' LIT ';' {insert_symbol($3, 1, $7, line_number, "-");}
     | LET MUT ID '=' LIT ';' {insert_symbol($3, 1, $5, line_number, "-");}
-    | LET MUT ID ':' Type ';' {insert_symbol($3, 1, $5, line_number, "-");}             // a05
+    | LET MUT ID ':' Type ';' {insert_symbol($3, 1, $5, line_number, "-");}
     | ID ADD_ASSIGN LIT ';' {printf("ADD_ASSIGN\n");}
     | ID SUB_ASSIGN LIT ';' {printf("SUB_ASSIGN\n");}
     | ID MUL_ASSIGN LIT ';' {printf("MUL_ASSIGN\n");}
@@ -159,11 +152,11 @@ AssignStmt
             if(0 == lookup_symbol_mut($1))
                 printf("error:%d: cannot borrow immutable borrowed content `%s` as mutable\n", line_number, $1);
         }}
-    | LET ID ':' ARRAY {insert_symbol($2, 0, "array", line_number, "-");}              // a08
+    | LET ID ':' ARRAY {insert_symbol($2, 0, "array", line_number, "-");}
 ;
 
 ARRAY
-    : '[' Type ';' INT_LIT {printf("INT_LIT %d\n", $4);} ']' '=' '[' elem ']' ';' ;                                       // a08
+    : '[' Type ';' INT_LIT {printf("INT_LIT %d\n", $4);} ']' '=' '[' elem ']' ';' ;
 elem
     : LIT ',' elem 
     | LIT
@@ -174,8 +167,7 @@ PrintStatement
     | PRINT '(' PrintContentList ')' ';' {printf("PRINT %s\n", $3); };
 PrintContentList
     : PrintContentList PrintContent {$$ = !strcmp($2,"bruh")?$1:$2;}
-    | /* empty */ {$$ = "bruh";}
-;
+    | /* empty */ {$$ = "bruh";};
 PrintContent
     : Expression {$$ = $1;}
     | NEWLINE {$$ = "bruh"; ++line_number;}
@@ -194,9 +186,8 @@ EqualityExpr
     : EqualityExpr '>' SHIFTING 
     {
         $$ = "bool"; 
-        // printf("%s %s\n",lookup_symbol_type($1), lookup_symbol_type($3));
-        // if(lookup_symbol_type($1) != lookup_symbol_type($3))                                                                                                                // a09
-        //     printf("error:%d: invalid operation: GTR (mismatched types %s and %s)\n",line_number, lookup_symbol_type($1), lookup_symbol_type($3));                       // a09
+        if(strcmp($1, $3) != 0)
+            printf("error:%d: invalid operation: GTR (mismatched types %s and %s)\n",line_number, $1, $3);
         printf("GTR\n"); 
     }
     | EqualityExpr '<' SHIFTING {$$ = "bool"; printf("LSS\n");}
@@ -205,8 +196,8 @@ EqualityExpr
     | SHIFTING {$$ = $1;} ;
 SHIFTING
     : SHIFTING LSHIFT AddExpr {$$ = "i32"; 
-        if($1 != $3)                                                                                                                // a09
-            printf("error:%d: invalid operation: LSHIFT (mismatched types %s and %s)\n",line_number, $1, $3);                       // a09
+        if($1 != $3)
+            printf("error:%d: invalid operation: LSHIFT (mismatched types %s and %s)\n",line_number, $1, $3);
         printf("LSHIFT\n");}
     | SHIFTING RSHIFT AddExpr {$$ = "i32"; printf("RSHIFT\n");}
     | AddExpr {$$ = $1;} ;
@@ -222,13 +213,17 @@ MulExpr
 UnaryExpr
     : '-' UnaryExpr {$$ = $2; printf("NEG\n");}
     | '!' UnaryExpr {$$ = "bool"; printf("NOT\n");}
-    | Atom {$$ = $1;} ;
-Atom
+    | PrimaryExpr {$$ = $1;} ;
+PrimaryExpr
     : '(' Expression ')' {$$ = $2;} ;
     | Operand
     | Operand AS Type 
-        {if(!strcmp($1, "f32") && !strcmp($3, "i32")) printf("f2i\n");                                                   // a05
-        else if (!strcmp($1, "i32") && !strcmp($3, "f32")) printf("i2f\n");}                                             // a05
+    {
+        if(!strcmp($1, "f32") && !strcmp($3, "i32"))
+            printf("f2i\n");
+        else if (!strcmp($1, "i32") && !strcmp($3, "f32"))
+            printf("i2f\n");
+    }
 ;
 
 Type 
@@ -286,11 +281,11 @@ int main(int argc, char *argv[])
 
 static void create_symbol() {
     printf("> Create symbol table (scope level %d)\n", ++scope_level);
-
 }
 
 static void insert_symbol(char* name, int mut, char *type, int lineno, char *func_sig) {
     int index = symbol_count[scope_level];
+
     symbol_table[scope_level][index].index = index;
     symbol_table[scope_level][index].name = strdup(name);
     symbol_table[scope_level][index].mut = mut;
@@ -303,55 +298,48 @@ static void insert_symbol(char* name, int mut, char *type, int lineno, char *fun
     printf("> Insert `%s` (addr: %d) to scope level %d\n", name, addr, scope_level);
 }
 
-static char* lookup_symbol_type(char* ID_name) {
-    char* SameType = "undefined";
-    for(int i=scope_level; i>=0;i--){
-        for(int j =0; j<symbol_count[i]; j++){
-            if(0 ==  strcmp(ID_name,symbol_table[i][j].name)){
-                SameType = symbol_table[i][j].type;
-                return SameType;
+static char* lookup_symbol_type(char* name) {
+    for(int i = scope_level; i >= 0; i--){
+        for(int j = 0; j < symbol_count[i]; j++){
+            if(strcmp(name,symbol_table[i][j].name) == 0){
+                return symbol_table[i][j].type;
             }
         }
     }
-    return SameType;
+    return "undefined";
 }
 
-static int lookup_symbol_addr(char* ID_name) {
-    int addregera = -2147483648;
-    for(int i=scope_level; i>=0;i--){
-        for(int j =0; j<symbol_count[i]; j++){
-            if(0 ==  strcmp(ID_name,symbol_table[i][j].name)){
-                addregera = symbol_table[i][j].addr;
-                return addregera;
+static int lookup_symbol_addr(char* name) {
+    for(int i = scope_level; i >= 0; i--){
+        for(int j = 0; j < symbol_count[i]; j++){
+            if(strcmp(name,symbol_table[i][j].name) == 0){
+                return symbol_table[i][j].addr;
             }
         }
     }
-    return addregera;
+    return -2147483648;
 }
 
-static int lookup_symbol_mut(char* ID_name) {
-    int mutable = 0;
-    for(int i=scope_level; i>=0;i--){
-        for(int j =0; j<symbol_count[i]; j++){
-            if(0 ==  strcmp(ID_name,symbol_table[i][j].name)){
-                mutable = symbol_table[i][j].mut;
-                return mutable;
+static int lookup_symbol_mut(char* name) {
+    for(int i = scope_level; i >= 0; i--){
+        for(int j = 0; j < symbol_count[i]; j++){
+            if(strcmp(name,symbol_table[i][j].name) == 0){
+                return symbol_table[i][j].mut;
             }
         }
     }
-    return mutable;
+    return 0;
 }
 
 static void dump_symbol() {
-    int level = scope_level;
-    printf("\n> Dump symbol table (scope level: %d)\n", level);
+    printf("\n> Dump symbol table (scope level: %d)\n", scope_level);
     printf("%-10s%-10s%-10s%-10s%-10s%-10s%-10s\n",
         "Index", "Name", "Mut", "Type", "Addr", "Lineno", "Func_sig");
-    for (int i = 0; i < symbol_count[level]; i++) {
-        Symbol s = symbol_table[level][i];
+    for (int i = 0; i < symbol_count[scope_level]; i++) {
+        Symbol s = symbol_table[scope_level][i];
         printf("%-10d%-10s%-10d%-10s%-10d%-10d%-10s\n",
             s.index, s.name, s.mut, s.type, s.addr, s.lineno, s.func_sig);
     }
-    symbol_count[level] = 0;
+    symbol_count[scope_level] = 0;
     scope_level--;
 }
